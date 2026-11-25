@@ -95,13 +95,15 @@
 .cm-md-code,
 .notes-inline-editor .cm-md-source-block {
   font-family: Consolas, "Cascadia Code", "Microsoft YaHei", monospace;
-  background: var(--bg-subtle);
+  background: var(--markdown-code-background, var(--bg-subtle));
+  color: var(--markdown-code-foreground, inherit);
 }
 .notes-inline-editor .cm-line.cm-md-code-line {
   padding-inline: 10px;
   line-height: 1.65;
   font-family: Consolas, "Cascadia Code", "Microsoft YaHei", monospace;
-  background: var(--bg-subtle);
+  background: var(--markdown-code-background, var(--bg-subtle));
+  color: var(--markdown-code-foreground, inherit);
   border-inline: 1px solid var(--border);
 }
 .notes-inline-editor .cm-line.cm-md-code-first {
@@ -115,7 +117,7 @@
   border-end-start-radius: 6px;
   border-end-end-radius: 6px;
 }
-.notes-inline-editor .cm-md-yaml-marker { color: var(--muted); }
+.notes-inline-editor .cm-line.cm-md-yaml-marker { color: var(--markdown-code-secondary, var(--muted)); }
 .notes-inline-editor .cm-md-yaml-opener::after {
   content: "YAML";
   float: inline-end;
@@ -310,7 +312,7 @@
   padding: 0 6px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--surface);
+  background: var(--markdown-code-background, var(--surface));
   opacity: 0;
   pointer-events: none;
 }
@@ -633,17 +635,17 @@
   font-family: Consolas, "Cascadia Code", monospace;
   font-size: 0.9em;
   padding: 0.15em 0.35em;
-  background: var(--bg-subtle);
+  background: var(--markdown-code-background, var(--bg-subtle));
   border: 1px solid var(--border);
   border-radius: 4px;
-  color: inherit;
+  color: var(--markdown-code-foreground, inherit);
 }
 .markdown-code-block {
   margin: 1em 0;
   border: 1px solid var(--border);
   border-radius: 7px;
   overflow: hidden;
-  background: var(--bg-subtle);
+  background: var(--markdown-code-background, var(--bg-subtle));
 }
 .markdown-code-toolbar {
   display: flex;
@@ -652,7 +654,7 @@
   gap: 12px;
   padding: 5px 10px;
   border-bottom: 1px solid var(--border);
-  color: var(--secondary);
+  color: var(--markdown-code-secondary, var(--secondary));
   font-size: 10px;
   line-height: 1.5;
 }
@@ -661,17 +663,19 @@
   align-items: center;
   gap: 5px;
   padding: 3px 0;
-  color: var(--secondary);
+  color: var(--markdown-code-secondary, var(--secondary));
   font-size: 10px;
 }
 .markdown-code-toolbar > button:hover {
-  color: var(--accent);
+  color: var(--markdown-code-foreground, var(--accent));
 }
 .markdown-body pre {
   margin: 0;
   padding: 13px 14px;
   overflow: auto;
   max-height: 650px;
+  background: var(--markdown-code-background, transparent);
+  color: var(--markdown-code-foreground, inherit);
   font-family: Consolas, "Cascadia Code", monospace;
   font-size: 12px;
   line-height: 1.75;

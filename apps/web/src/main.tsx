@@ -2,13 +2,15 @@ import {
   inspectMarkdown, MarkdownEditor, readMarkdownShortcutOverrides,
   type MarkdownEditorHandle, type MarkdownMode, type MarkdownOutlineItem, type MarkdownShortcutOverrides, type MarkdownTheme,
 } from "@lition13/markdown-editor";
-import { CodeXml, FileText, FolderOpen, Github, Keyboard, ListTree, Maximize2, Moon, PanelBottom, PencilLine, Sun, X } from "lucide-react";
+import { CodeXml, FileText, FolderOpen, Github, Keyboard, ListTree, Maximize2, Moon, Palette, PanelBottom, PencilLine, Sun, X } from "lucide-react";
 import { StrictMode, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "@lition13/markdown-editor/style.css";
 import FileManager from "./FileManager";
 import ShortcutSettings from "./ShortcutSettings";
 import SidePanel from "./SidePanel";
+import ThemeSettings from "./ThemeSettings";
+import { readThemePreference, themeVariables, validateThemeName, type CustomTheme, type ThemePreference } from "./themes";
 import { useFileLibrary } from "./useFileLibrary";
 import "./site.css";
 
@@ -31,7 +33,12 @@ function preference(key: string) {
 }
 
 function savePreference(key: string, value: string) {
-  try { localStorage.setItem(key, value); } catch {}
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function useVisibility(key: string, defaultVisible = true) {
@@ -47,10 +54,9 @@ function useVisibility(key: string, defaultVisible = true) {
   return [visible, setVisible] as const;
 }
 
-function readTheme(): MarkdownTheme {
-  const theme = preference(themeKey);
-  if (theme === "dark" || theme === "light") return theme;
-  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+function readTheme(): ThemePreference {
+  const fallback = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return readThemePreference(preference(themeKey), fallback);
 }
 
 function readShortcuts(): MarkdownShortcutOverrides {
@@ -111,12 +117,14 @@ function Toolbar({ children }: { children: ReactNode }) {
 }
 
 function Workspace({
-  library, theme, toggleTheme, compact, filesOpen, outlineOpen, statusOpen, showFiles,
+  library, theme, customThemeActive, toggleTheme, showThemeSettings, compact, filesOpen, outlineOpen, statusOpen, showFiles,
   toggleFiles, toggleOutline, closeOutline, toggleStatus, shortcuts, showShortcuts,
 }: {
   library: ReturnType<typeof useFileLibrary>;
   theme: MarkdownTheme;
+  customThemeActive: boolean;
   toggleTheme: () => void;
+  showThemeSettings: () => void;
   compact: boolean;
   filesOpen: boolean;
   outlineOpen: boolean;
@@ -207,6 +215,10 @@ function Workspace({
           title={theme === "dark" ? "切换浅色主题" : "切换深色主题"} onClick={toggleTheme}>
           {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
         </button>
+        <button type="button" className="icon-control theme-control" aria-label="自定义主题" title="自定义主题"
+          aria-controls="theme-settings" aria-haspopup="dialog" data-active={customThemeActive} onClick={showThemeSettings}>
+          <Palette size={18} aria-hidden="true" />
+        </button>
         <a className="icon-control github" href={repository} target="_blank" rel="noreferrer" aria-label="GitHub 源码" title="GitHub 源码">
           <Github size={18} />
         </a>
@@ -271,7 +283,11 @@ function Workspace({
 
 function App() {
   const library = useFileLibrary();
-  const [theme, setTheme] = useState(readTheme);
+  const [appearance, setAppearance] = useState(readTheme);
+  const [themeSettingsOpen, setThemeSettingsOpen] = useState(false);
+  const selectedTheme = appearance.themes.find(theme => theme.id === appearance.customId);
+  const customTheme = appearance.active === "custom" ? selectedTheme : undefined;
+  const theme = customTheme?.base ?? (appearance.active === "dark" ? "dark" : "light");
   const compact = useCompactLayout();
   const [filesVisible, setFilesVisible] = useVisibility(filesKey);
   const [outlineVisible, setOutlineVisible] = useVisibility(outlineKey);
@@ -286,10 +302,24 @@ function App() {
   const filesOpen = compact ? drawer === "files" : filesVisible;
   const outlineOpen = compact ? drawer === "outline" : outlineVisible;
 
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.dataset.theme = theme;
+    root.dataset.themeChoice = appearance.active;
+    if (!customTheme) return;
+    const variables = Object.entries(themeVariables(customTheme));
+    for (const [name, value] of variables) root.style.setProperty(name, value);
+    return () => {
+      for (const [name] of variables) root.style.removeProperty(name);
+    };
+  }, [appearance.active, customTheme, theme]);
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    savePreference(themeKey, theme);
-  }, [theme]);
+    function syncTheme(event: StorageEvent) {
+      if (event.key === themeKey || event.key === null) setAppearance(readTheme());
+    }
+    window.addEventListener("storage", syncTheme);
+    return () => window.removeEventListener("storage", syncTheme);
+  }, []);
   useLayoutEffect(() => {
     savePreference(drawerKey, drawer ?? "closed");
   }, [drawer]);
@@ -307,6 +337,26 @@ function App() {
     else setOutlineVisible(false);
   }
 
+  function toggleTheme() {
+    const active = theme === "dark" ? "light" : "dark";
+    const next: ThemePreference = { ...readTheme(), active };
+    setAppearance(next);
+    savePreference(themeKey, next.themes.length ? JSON.stringify(next) : active);
+  }
+
+  function saveCustomTheme(theme: CustomTheme, existingId: string) {
+    const { themes } = readTheme();
+    const nameError = validateThemeName(theme.name, existingId, themes);
+    if (nameError) return nameError;
+    const saved = { ...theme, name: theme.name.trim(), id: existingId || crypto.randomUUID() };
+    const at = themes.findIndex(theme => theme.id === saved.id);
+    if (at === -1) themes.push(saved);
+    else themes[at] = saved;
+    const next: ThemePreference = { active: "custom", customId: saved.id, themes };
+    if (!savePreference(themeKey, JSON.stringify(next))) return "当前浏览器无法保存主题设置。";
+    setAppearance(next);
+  }
+
   function updateShortcuts(next: MarkdownShortcutOverrides) {
     setShortcuts(next);
     try {
@@ -320,15 +370,18 @@ function App() {
   return (
     <div className="workbench" data-files={!compact && filesOpen} data-outline={!compact && outlineOpen}>
       <Workspace key={library.current?.id ?? "workspace"} library={library} theme={theme}
+        customThemeActive={!!customTheme} showThemeSettings={() => setThemeSettingsOpen(true)}
         compact={compact} filesOpen={filesOpen} outlineOpen={outlineOpen} statusOpen={statusOpen} showFiles={showFiles}
         shortcuts={shortcuts} showShortcuts={() => setShortcutsOpen(true)}
-        toggleTheme={() => setTheme(value => value === "dark" ? "light" : "dark")}
+        toggleTheme={toggleTheme}
         toggleFiles={filesOpen ? closeFiles : showFiles}
         toggleOutline={outlineOpen ? closeOutline : () => { if (compact) setDrawer("outline"); else setOutlineVisible(true); }}
         closeOutline={closeOutline} toggleStatus={() => setStatusOpen(value => !value)} />
       <FileManager library={library} open={filesOpen} compact={compact} onClose={closeFiles} />
       {shortcutsOpen && <ShortcutSettings value={shortcuts} onChange={updateShortcuts} onClose={() => setShortcutsOpen(false)}
         storageFailed={shortcutStorageFailed} />}
+      {themeSettingsOpen && <ThemeSettings base={theme} themes={appearance.themes} selected={selectedTheme}
+        onSave={saveCustomTheme} onClose={() => setThemeSettingsOpen(false)} />}
     </div>
   );
 }

@@ -38,6 +38,71 @@
   --shadow: 0 16px 56px #05070f60;
 }
 
+:root[data-theme-choice="custom"] {
+  --panel: var(--theme-background);
+  --panel-soft: color-mix(in srgb, var(--theme-background), var(--theme-muted) 6%);
+  --sidebar: var(--theme-sidebar);
+  --text: var(--theme-text);
+  --muted: var(--theme-muted);
+  --edge: color-mix(in srgb, var(--theme-background), var(--theme-muted) 23%);
+  --accent: var(--theme-accent);
+  --accent-text: var(--theme-link);
+  --accent-hover: color-mix(in srgb, var(--theme-accent), var(--theme-accent-ink) 12%);
+  --accent-ink: var(--theme-accent-ink);
+  --soft-accent: color-mix(in srgb, var(--theme-background), var(--theme-accent) 13%);
+}
+
+:root[data-theme-choice="custom"] .side-panel {
+  --panel: color-mix(in srgb, var(--theme-sidebar), var(--theme-sidebar-text) 7%);
+  --panel-soft: color-mix(in srgb, var(--theme-sidebar), var(--theme-sidebar-text) 11%);
+  --text: var(--theme-sidebar-text);
+  --muted: var(--theme-sidebar-muted);
+  --edge: color-mix(in srgb, var(--theme-sidebar), var(--theme-sidebar-muted) 23%);
+  --accent-text: var(--theme-sidebar-link);
+  --soft-accent: color-mix(in srgb, var(--theme-sidebar), var(--theme-accent) 13%);
+}
+
+:root[data-theme-choice="custom"] .markdown-surface {
+  --surface: var(--theme-background);
+  --text: var(--theme-text);
+  --secondary: var(--theme-muted);
+  --muted: var(--theme-muted);
+  --bg-subtle: var(--panel-soft);
+  --hover: color-mix(in srgb, var(--theme-background), var(--theme-muted) 10%);
+  --border: var(--edge);
+  --border-strong: color-mix(in srgb, var(--theme-background), var(--theme-muted) 34%);
+  --accent: var(--theme-accent);
+  --accent-text: var(--theme-link);
+  --accent-soft: var(--soft-accent);
+  --markdown-primary-foreground: var(--theme-accent-ink);
+  --markdown-code-background: var(--theme-code);
+  --markdown-code-foreground: var(--theme-code-text);
+  --markdown-code-secondary: var(--theme-code-muted);
+  --md-comment: var(--theme-code-comment);
+  --md-keyword: var(--theme-code-keyword);
+  --md-string: var(--theme-code-string);
+  --md-number: var(--theme-code-number);
+  --md-title: var(--theme-code-title);
+  --md-variable: var(--theme-code-variable);
+}
+
+:root[data-theme-choice="custom"] .cm-md-code-line {
+  caret-color: var(--markdown-code-foreground);
+}
+
+:root[data-theme-choice="custom"] .markdown-mermaid .mermaid-canvas {
+  border-radius: 4px;
+  background: light-dark(#f2f5fa, #222e44);
+}
+
+:root[data-theme-choice="custom"] .markdown-mermaid :is(.mermaid-source-toggle, .markdown-diagram-error) {
+  color: var(--markdown-code-foreground);
+}
+
+:root[data-theme-choice="custom"] .markdown-mermaid .markdown-loading {
+  color: var(--markdown-code-secondary);
+}
+
 * { box-sizing: border-box; }
 body { margin: 0; }
 button, input, select { font: inherit; }
@@ -103,9 +168,9 @@ button, input, select { font: inherit; }
 .button.primary:hover { background: var(--accent-hover); }
 .button:disabled { opacity: .5; cursor: not-allowed; }
 .icon-control { width: 36px; padding: 0; color: var(--muted); }
-.panel-toggle[aria-expanded="true"], .panel-toggle[aria-pressed="true"] {
+.panel-toggle[aria-expanded="true"], .panel-toggle[aria-pressed="true"], .theme-control[data-active="true"] {
   background: var(--soft-accent);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .workbench {
   --left-column: 0px;
@@ -336,7 +401,7 @@ dialog.side-panel::backdrop { background: #101a3278; }
   font-weight: 600;
   cursor: pointer;
 }
-.library-root:hover, .library-root[aria-current] { background: var(--panel); color: var(--accent); }
+.library-root:hover, .library-root[aria-current] { background: var(--panel); color: var(--accent-text, var(--accent)); }
 .library-placement {
   min-width: 0;
   overflow: hidden;
@@ -395,7 +460,9 @@ dialog.side-panel::backdrop { background: #101a3278; }
 .file-open svg { flex: none; color: var(--muted); }
 .folder-chevron { flex: 0 0 12px; }
 .file-open[aria-expanded="true"] .folder-chevron { transform: rotate(90deg); }
-.folder-row .file-kind-icon svg, .is-current .file-kind-icon svg, .file-open[aria-current="location"] { color: var(--accent); }
+.folder-row .file-kind-icon svg, .is-current .file-kind-icon svg, .file-open[aria-current="location"] {
+  color: var(--accent-text, var(--accent));
+}
 .file-open[aria-current="location"] .file-list-name, .is-current .file-list-name { font-weight: 620; }
 .file-kind-icon {
   display: inline-grid;
@@ -463,7 +530,7 @@ dialog.side-panel::backdrop { background: #101a3278; }
 }
 .library-destinations button { cursor: pointer; }
 .library-destinations button:hover { background: var(--panel-soft); }
-.library-destinations svg { flex: none; color: var(--accent); }
+.library-destinations svg { flex: none; color: var(--accent-text, var(--accent)); }
 .library-destinations li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .destination-empty {
   margin: 0 5px;
@@ -475,7 +542,7 @@ dialog.side-panel::backdrop { background: #101a3278; }
   outline: 2px solid var(--accent);
   outline-offset: -2px;
   background: var(--soft-accent);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .outline-links { padding: 9px 7px; display: grid; gap: 2px; }
 .outline-links button {
@@ -494,7 +561,7 @@ dialog.side-panel::backdrop { background: #101a3278; }
   cursor: pointer;
 }
 .outline-links button:hover { background: var(--panel); }
-.outline-links button[aria-current="location"] { color: var(--accent); background: var(--soft-accent); }
+.outline-links button[aria-current="location"] { color: var(--accent-text, var(--accent)); background: var(--soft-accent); }
 .outline-empty { margin: 13px 12px; color: var(--muted); font-size: .83rem; }
 
 @media (max-width: 530px) {
@@ -508,6 +575,12 @@ dialog.side-panel::backdrop { background: #101a3278; }
   .workspace-body { --workspace-padding-bottom: 29px; padding-inline: 13px; }
   .workspace-footer { padding-inline: 8px; gap: 3px 8px; font-size: .75rem; }
   .document-statistics { gap: 7px; }
+}
+@media (max-width: 380px) {
+  .workbench-toolbar { gap: 3px; padding-inline: 5px; }
+  .workbench-toolbar .panel-toggle { min-width: 30px; padding-inline: 4px; }
+  .workbench-toolbar .icon-control { width: 28px; }
+  .view-options button { padding-inline: 5px; }
 }
 @media (hover: none) and (pointer: coarse) {
   :root { --toolbar-edge: 34px; --toolbar-row: 50px; }

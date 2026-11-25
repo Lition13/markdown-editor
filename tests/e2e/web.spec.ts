@@ -327,6 +327,171 @@ test("工作台铺满窗口，顶栏悬浮，字词和行数实时更新并记�
   await expect(stats.getByText("6 字词", { exact: true })).toBeVisible();
 });
 
+test("自定义主题预览后应用到工作区、代码和全屏，刷新后仍可切换回内置主题", async ({ page }) => {
+  await page.goto("./");
+  const files = await fileManager(page);
+  const source = "# 项目笔记\n\n正文示例。\n\n~~~js\nconst tint = 3;\n~~~\n\n~~~mermaid\nflowchart LR\nA --> B\n~~~";
+  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+    name: "主题验收.md", mimeType: "text/markdown", buffer: Buffer.from(source),
+  });
+  const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
+  const canvas = page.locator(".workspace");
+  const root = page.locator("html");
+  const toolbar = await revealToolbar(page);
+  const themeButton = toolbar.getByRole("button", { name: "自定义主题", exact: true });
+  const settings = page.getByRole("dialog", { name: "自定义主题", exact: true });
+  const preview = settings.locator(".theme-preview-window");
+  const apply = settings.getByRole("button", { name: "保存并应用", exact: true });
+  await themeButton.click();
+  await settings.getByLabel("主题名称", { exact: true }).fill("暖纸");
+  await settings.getByRole("button", { name: "深色", exact: true }).click();
+  await settings.getByRole("textbox", { name: "工作区背景", exact: true }).fill("#F4EFE6");
+  await settings.getByRole("textbox", { name: "侧栏背景", exact: true }).fill("#dedace");
+  await settings.getByRole("textbox", { name: "文字颜色", exact: true }).fill("#26382f");
+  await settings.getByRole("textbox", { name: "代码底色", exact: true }).fill("#172923");
+  const accent = settings.getByRole("textbox", { name: "强调色", exact: true });
+  await accent.fill("无效颜色");
+  await expect(accent).toHaveAttribute("aria-invalid", "true");
+  await expect(apply).toBeDisabled();
+  await settings.getByLabel("强调色取色", { exact: true }).fill("#28775c");
+  await expect(accent).toHaveValue("#28775c");
+  await expect(preview).toHaveCSS("background-color", "rgb(244, 239, 230)");
+  await expect(preview.locator("pre")).toHaveCSS("background-color", "rgb(23, 41, 35)");
+  await expect(canvas).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await apply.click();
+  await expect(settings).toBeHidden();
+  await expect(root).toHaveAttribute("data-theme", "dark");
+  await expect(root).toHaveAttribute("data-theme-choice", "custom");
+  await expect(canvas).toHaveCSS("background-color", "rgb(244, 239, 230)");
+  await expect(files).toHaveCSS("background-color", "rgb(222, 218, 206)");
+  await expect(editor).toHaveCSS("color", "rgb(38, 56, 47)");
+  await expect(files.getByRole("button", { name: "新建", exact: true })).toHaveCSS("background-color", "rgb(40, 119, 92)");
+  const diagram = page.getByRole("img", { name: "Mermaid 图表", exact: true });
+  await expect(diagram).toHaveCSS("background-color", "rgb(34, 46, 68)");
+  const code = editor.locator(".markdown-code-block > pre");
+  await expect(code).toHaveCSS("background-color", "rgb(23, 41, 35)");
+  await code.click();
+  await expect(editor.locator(".cm-md-code-line")).toHaveCSS("background-color", "rgb(23, 41, 35)");
+  await revealToolbar(page);
+  await toolbar.getByRole("button", { name: "全屏编辑", exact: true }).click();
+  const fullscreen = page.getByRole("dialog", { name: "编辑 Markdown", exact: true });
+  await expect(fullscreen).toHaveCSS("background-color", "rgb(244, 239, 230)");
+  await expect(fullscreen.locator(".cm-md-code-line")).toHaveCSS("background-color", "rgb(23, 41, 35)");
+  await page.keyboard.press("Escape");
+  await expect(fullscreen).toBeHidden();
+
+  await page.reload();
+  await expect(root).toHaveAttribute("data-theme-choice", "custom");
+  await expect(canvas).toHaveCSS("background-color", "rgb(244, 239, 230)");
+  await revealToolbar(page);
+  await toolbar.getByRole("button", { name: "切换浅色主题", exact: true }).click();
+  await expect(root).toHaveAttribute("data-theme-choice", "light");
+  await expect(canvas).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await page.reload();
+  await expect(root).toHaveAttribute("data-theme-choice", "light");
+  await revealToolbar(page);
+  await themeButton.click();
+  await expect(settings.getByLabel("主题名称", { exact: true })).toHaveValue("暖纸");
+  await expect(settings.getByRole("textbox", { name: "工作区背景", exact: true })).toHaveValue("#f4efe6");
+  await expect(settings.getByRole("textbox", { name: "强调色", exact: true })).toHaveValue("#28775c");
+  await apply.click();
+  await expect(root).toHaveAttribute("data-theme-choice", "custom");
+});
+
+test("窄窗可恢复主题基底颜色并取消预览，旧的深色偏好继续可读", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 620 });
+  await page.addInitScript(() => localStorage.setItem("lition13-markdown-editor-theme", "dark"));
+  await page.goto("./");
+  const root = page.locator("html");
+  const toolbar = await revealToolbar(page);
+  const themeButton = toolbar.getByRole("button", { name: "自定义主题", exact: true });
+  await expect(themeButton).toBeInViewport({ ratio: 1 });
+  await expect(root).toHaveAttribute("data-theme-choice", "dark");
+  await themeButton.click();
+  const settings = page.getByRole("dialog", { name: "自定义主题", exact: true });
+  const background = settings.getByRole("textbox", { name: "工作区背景", exact: true });
+  await expect(background).toHaveValue("#192133");
+  await settings.getByRole("button", { name: "浅色", exact: true }).click();
+  await background.fill("#abc");
+  await expect(settings.locator(".theme-preview-window")).toHaveCSS("background-color", "rgb(170, 187, 204)");
+  await settings.getByRole("button", { name: "恢复基底颜色", exact: true }).click();
+  await expect(background).toHaveValue("#ffffff");
+  await settings.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(settings).toBeHidden();
+  await expect(root).toHaveAttribute("data-theme-choice", "dark");
+  await expect(page.locator(".workspace")).toHaveCSS("background-color", "rgb(25, 33, 51)");
+});
+
+test("用主题源码新建并复制具名主题，多个主题刷新后仍能切换", async ({ page, context }) => {
+  await page.addInitScript(() => {
+    let copied = "";
+    Object.defineProperty(navigator, "clipboard", {
+      value: {
+        async writeText(text: string) { copied = text; },
+        async readText() { return copied; },
+      },
+    });
+  });
+  await page.goto("./");
+  const themeButton = (await revealToolbar(page)).getByRole("button", { name: "自定义主题", exact: true });
+  const settings = page.getByRole("dialog", { name: "自定义主题", exact: true });
+  const profiles = settings.getByRole("combobox", { name: "编辑主题", exact: true });
+  const name = settings.getByLabel("主题名称", { exact: true });
+  const source = settings.getByRole("textbox", { name: "JSON 源码", exact: true });
+  const apply = settings.getByRole("button", { name: "保存并应用", exact: true });
+  const canvas = page.locator(".workspace");
+  await themeButton.click();
+  await name.fill("书页");
+  await settings.getByLabel("工作区背景", { exact: true }).fill("#faf2e8");
+  await apply.click();
+  await expect(canvas).toHaveCSS("background-color", "rgb(250, 242, 232)");
+
+  const otherTab = await context.newPage();
+  await otherTab.goto("./");
+  await expect(otherTab.locator(".workspace")).toHaveCSS("background-color", "rgb(250, 242, 232)");
+  await page.bringToFront();
+  await revealToolbar(page);
+  await themeButton.click();
+  await profiles.selectOption({ label: "新建主题" });
+  await settings.getByRole("button", { name: "主题源码", exact: true }).click();
+  await source.fill("{");
+  await expect(source).toHaveAttribute("aria-invalid", "true");
+  await expect(apply).toBeDisabled();
+  await source.fill(JSON.stringify({ name: "深海", base: "dark", colors: { background: "#243448", accent: "#9bd" } }));
+  await expect(settings.locator(".theme-preview-window")).toHaveCSS("background-color", "rgb(36, 52, 72)");
+  await expect(canvas).toHaveCSS("background-color", "rgb(250, 242, 232)");
+  await settings.getByRole("button", { name: "配色", exact: true }).click();
+  await expect(name).toHaveValue("深海");
+  await expect(settings.getByLabel("强调色", { exact: true })).toHaveValue("#99bbdd");
+  await apply.click();
+  await expect(canvas).toHaveCSS("background-color", "rgb(36, 52, 72)");
+  await expect(otherTab.locator(".workspace")).toHaveCSS("background-color", "rgb(36, 52, 72)");
+  await otherTab.close();
+
+  await page.reload();
+  await expect(canvas).toHaveCSS("background-color", "rgb(36, 52, 72)");
+  await revealToolbar(page);
+  await themeButton.click();
+  await expect(profiles.locator("option:checked")).toHaveText("深海");
+  await settings.getByRole("button", { name: "主题源码", exact: true }).click();
+  await settings.getByRole("button", { name: "复制源码", exact: true }).click();
+  await expect(settings.getByText("已复制源码", { exact: true })).toBeVisible();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(JSON.parse(copied)).toMatchObject({ name: "深海", base: "dark", colors: { accent: "#99bbdd" } });
+  await profiles.selectOption({ label: "新建主题" });
+  await source.fill(copied);
+  await expect(settings.getByText("已有同名主题，请换个名字。", { exact: true })).toBeVisible();
+  await expect(apply).toBeDisabled();
+  await profiles.selectOption({ label: "书页" });
+  await apply.click();
+  await expect(canvas).toHaveCSS("background-color", "rgb(250, 242, 232)");
+  await page.reload();
+  await expect(canvas).toHaveCSS("background-color", "rgb(250, 242, 232)");
+  await revealToolbar(page);
+  await themeButton.click();
+  await expect(profiles.getByRole("option", { name: "深海", exact: true })).toHaveCount(1);
+});
+
 test("文件栏、大纲和顶栏在刷新与重新打开后恢复显隐", async ({ page, context }) => {
   await page.goto("./");
   const toolbar = page.locator("#workbench-toolbar");

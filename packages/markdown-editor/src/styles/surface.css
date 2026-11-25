@@ -93,7 +93,7 @@
   }
   .primary-button {
     background: var(--accent);
-    color: light-dark(#fff, #111c36);
+    color: var(--markdown-primary-foreground, light-dark(#fff, #111c36));
     border-radius: var(--radius);
     padding: .35rem .8rem;
     font-size: var(--font-label);
