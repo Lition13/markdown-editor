@@ -332,7 +332,11 @@ export default function InlineMarkdownEditor(props: Props) {
       }),
     });
     editor.current = view;
-    if (latest.current.focusOnMount) view.focus();
+    if (latest.current.focusOnMount) {
+      view.focus();
+      const padding = parseFloat(getComputedStyle(view.dom.ownerDocument.documentElement).scrollPaddingTop) || 0;
+      view.dispatch({ effects: EditorView.scrollIntoView(view.state.selection.main.head, { yMargin: padding + 8 }) });
+    }
     return () => {
       editor.current = null;
       view.destroy();

@@ -65,7 +65,7 @@ import type { codeLanguages } from "../core/markdownCode";
 type Snapshot = { value: string; selection: TextSelection };
 const InlineMarkdownEditor = lazy(() => import("./InlineMarkdownEditor"));
 
-function textareaPoint(field: HTMLTextAreaElement, position: number): MenuPoint {
+function textareaPoint(field: HTMLTextAreaElement, position: number) {
   const bounds = field.getBoundingClientRect();
   const style = getComputedStyle(field);
   const mirror = document.createElement("div");
@@ -310,7 +310,19 @@ function Editor({
     focusAt(next);
   }, [value]);
   useLayoutEffect(() => {
-    if (mode === "source") focusAt(selection.current);
+    if (mode !== "source") return;
+    focusAt(selection.current);
+    const field = ref.current;
+    const viewport = field?.ownerDocument.defaultView;
+    if (!field || !viewport || viewport.getComputedStyle(field).getPropertyValue("field-sizing") !== "content") return;
+    const padding = parseFloat(viewport.getComputedStyle(field.ownerDocument.documentElement).scrollPaddingTop) || 0;
+    const top = padding + 8;
+    const bottom = viewport.innerHeight - 8;
+    const bounds = field.getBoundingClientRect();
+    if (bounds.top >= top && bounds.bottom <= bottom) return;
+    const caret = textareaPoint(field, field.selectionEnd);
+    if (caret.aboveY < top) viewport.scrollBy(0, caret.aboveY - top);
+    else if (caret.y > bottom) viewport.scrollBy(0, caret.y - bottom);
   }, [expanded, mode]);
   const format = (
     kind:

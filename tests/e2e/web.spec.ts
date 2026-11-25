@@ -76,6 +76,60 @@ test("打开 Markdown、编辑、刷新恢复、下载并重新打开", async ({
   await expect(document.getByRole("img", { name: "像素样例" })).toBeVisible();
 });
 
+test("源码占用同一块正文区，长文档随页面滚动", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("./");
+  const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
+  const modes = page.getByRole("group", { name: "文档视图" });
+  const liveMode = modes.getByRole("button", { name: "编辑", exact: true });
+  const sourceMode = modes.getByRole("button", { name: "源码", exact: true });
+  await expect(sourceMode).toBeEnabled();
+  await page.getByLabel("选择 Markdown 文件").setInputFiles({
+    name: "正文区.md", mimeType: "text/markdown", buffer: Buffer.from("一段简短的正文"),
+  });
+  await expect(editor).toHaveText("一段简短的正文");
+  const editBounds = await editor.boundingBox();
+  await sourceMode.click();
+  await expect(editor).toHaveValue("一段简短的正文");
+  expect(await editor.boundingBox()).toEqual(editBounds);
+  await expect(editor).toHaveCSS("border-top-width", "0px");
+  await expect(editor).toHaveCSS("resize", "none");
+
+  const lines = Array.from({ length: 35 }, (_, index) => `第 ${index + 1} 行正文`);
+  const longSource = [...lines, "a".repeat(180), "最后一行"].join("\n\n\n");
+  await editor.fill(longSource);
+  await expect.poll(() => editor.evaluate(field => ({
+    editorScrolls: field.scrollHeight > field.clientHeight + 1 || field.scrollWidth > field.clientWidth + 1,
+    pageScrolls: document.documentElement.scrollHeight > window.innerHeight,
+    pageOverflows: document.documentElement.scrollWidth > window.innerWidth,
+  }))).toEqual({ editorScrolls: false, pageScrolls: true, pageOverflows: false });
+
+  const target = lines[22];
+  const offset = longSource.indexOf(target);
+  await editor.evaluate((field, position) => (field as HTMLTextAreaElement).setSelectionRange(position, position), offset);
+  await editor.press("Control+/");
+  await expect(liveMode).toHaveAttribute("aria-pressed", "true");
+  await expect(editor).toBeFocused();
+  await expect.poll(() => page.evaluate(() => {
+    const focus = window.getSelection();
+    const caret = focus?.rangeCount ? focus.getRangeAt(0).getBoundingClientRect() : undefined;
+    const header = document.querySelector(".workspace-header")!.getBoundingClientRect();
+    return { text: focus?.focusNode?.textContent, visible: !!caret && caret.top >= header.bottom && caret.bottom <= innerHeight };
+  })).toEqual({ text: target, visible: true });
+  await expect(sourceMode).toBeInViewport({ ratio: 1 });
+  await sourceMode.click();
+  await expect(editor).toHaveValue(longSource);
+  await expect.poll(() => editor.evaluate(field => {
+    const area = field as HTMLTextAreaElement;
+    const style = getComputedStyle(area);
+    const lineHeight = parseFloat(style.lineHeight);
+    const precedingLines = area.value.slice(0, area.selectionEnd).split("\n").length - 1;
+    const top = area.getBoundingClientRect().top + parseFloat(style.paddingTop) + precedingLines * lineHeight;
+    const header = document.querySelector(".workspace-header")!.getBoundingClientRect();
+    return { offset: area.selectionEnd, visible: top >= header.bottom && top + lineHeight <= innerHeight };
+  })).toEqual({ offset, visible: true });
+});
+
 test("Pages 子路径通过站内资源渲染公式和 Mermaid", async ({ page, context }) => {
   const errors: string[] = [];
   const external: string[] = [];
