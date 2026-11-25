@@ -73,8 +73,8 @@ button, input { font: inherit; }
   color: var(--accent);
   background: var(--soft-accent);
 }
-.file-actions { display: flex; align-items: center; gap: 6px; }
-.button, .icon-control {
+.file-actions, .view-options { display: flex; align-items: center; gap: 6px; }
+.button, .icon-control, .view-options button {
   min-height: 36px;
   display: inline-flex;
   align-items: center;
@@ -107,7 +107,9 @@ button, input { font: inherit; }
 }
 .workspace-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
+  gap: 8px;
   min-height: 52px;
   padding: 9px 17px;
   border-bottom: 1px solid var(--edge);
@@ -124,6 +126,17 @@ button, input { font: inherit; }
 }
 .document-name svg { flex: none; color: var(--muted); }
 .document-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.view-options {
+  flex-shrink: 0;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--edge);
+  border-radius: 9px;
+  background: var(--panel);
+}
+.view-options button { min-height: 29px; padding: 0 9px; color: var(--muted); }
+.view-options button[aria-pressed="true"] { color: var(--text); background: var(--soft-accent); }
+.view-options button:disabled { cursor: wait; }
 .workspace-body {
   min-height: min(620px, calc(100dvh - 235px));
   padding: 35px clamp(24px, 6vw, 84px) 44px;
@@ -164,7 +177,7 @@ button, input { font: inherit; }
   .icon-control { min-height: 34px; width: 29px; }
   .github { display: none; }
   .workspace { margin: 14px auto 22px; }
-  .workspace-header { min-height: 46px; padding: 7px 10px; }
+  .workspace-header { min-height: 50px; padding: 7px 10px; }
   .workspace-body { padding: 21px 15px 29px; }
   .workspace-footer { padding: 9px 10px; }
 }

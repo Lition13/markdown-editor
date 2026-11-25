@@ -17,21 +17,48 @@ test("打开 Markdown、编辑、刷新恢复、下载并重新打开", async ({
   ].join("\n");
   const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
   const status = page.locator(".save-status");
+  const modes = page.getByRole("group", { name: "文档视图" });
+  const liveMode = modes.getByRole("button", { name: "编辑", exact: true });
+  const sourceMode = modes.getByRole("button", { name: "源码", exact: true });
   await page.goto("./");
   await expect(status).toHaveText("示例文档");
   await expect(editor).toBeVisible();
-  await expect(page.getByRole("group", { name: "文档视图" })).toHaveCount(0);
+  await expect(liveMode).toHaveAttribute("aria-pressed", "true");
+  await expect(sourceMode).toHaveAttribute("aria-pressed", "false");
   await page.getByLabel("选择 Markdown 文件").setInputFiles({
     name: "验收.markdown", mimeType: "text/markdown", buffer: Buffer.from(source),
   });
   await expect(page.getByText("验收.markdown")).toBeVisible();
-  await editor.press("Control+/");
+  await sourceMode.click();
+  await expect(sourceMode).toHaveAttribute("aria-pressed", "true");
+  await expect(editor).toHaveValue(source);
   const edited = source.replace("待验收", "已编辑");
   await editor.fill(edited);
   await expect(status).toHaveText("草稿已保存");
+
+  await editor.press("Control+Home");
+  await editor.press("ArrowRight");
+  await editor.press("ArrowRight");
+  await liveMode.click();
+  await expect(editor).toBeFocused();
+  await expect(page.getByRole("table")).toContainText("已编辑");
+  await sourceMode.click();
+  await expect.poll(() => editor.evaluate(field => (field as HTMLTextAreaElement).selectionStart)).toBe(2);
+
+  await editor.press("Control+/");
+  await expect(liveMode).toHaveAttribute("aria-pressed", "true");
+  await editor.press("/");
+  const commands = page.getByRole("menu", { name: "描述工具" });
+  await commands.getByRole("textbox", { name: "搜索描述工具" }).fill("编辑描述源码");
+  await commands.getByRole("menuitem", { name: "编辑描述源码", exact: true }).click();
+  await expect(sourceMode).toHaveAttribute("aria-pressed", "true");
+  await expect(editor).toHaveValue(edited);
+
   await page.reload();
   await expect(status).toHaveText("草稿已恢复");
+  await expect(liveMode).toHaveAttribute("aria-pressed", "true");
   await editor.press("Control+/");
+  await expect(sourceMode).toHaveAttribute("aria-pressed", "true");
   await expect(editor).toHaveValue(edited);
   const downloaded = page.waitForEvent("download");
   await page.getByRole("button", { name: "下载 .md" }).click();
@@ -43,6 +70,7 @@ test("打开 Markdown、编辑、刷新恢复、下载并重新打开", async ({
     name: file.suggestedFilename(), mimeType: "text/markdown", buffer: Buffer.from(content),
   });
   await expect(page.getByText("验收.md", { exact: true })).toBeVisible();
+  await expect(liveMode).toHaveAttribute("aria-pressed", "true");
   const document = page.locator(".notes-live-document");
   await expect(document.getByRole("table")).toContainText("已编辑");
   await expect(document.getByRole("img", { name: "像素样例" })).toBeVisible();

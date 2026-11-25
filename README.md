@@ -2,7 +2,7 @@
 
 [在线使用](https://lition13.github.io/markdown-editor/) · [组件安装包](https://github.com/Lition13/markdown-editor/releases)
 
-在浏览器打开本地 Markdown 文件，直接编辑正文，也可用 Ctrl+/ 切换到源码。网页在当前浏览器保存一个草稿，下载时导出 Markdown 源文。
+在浏览器打开本地 Markdown 文件，直接编辑正文，点「源码」或按 Ctrl+/ 切换到 Markdown 源文。网页在当前浏览器保存一个草稿，下载时导出 Markdown 源文。
 
 - 实时正文、源码切换、斜杠菜单、快捷键和撤销重做
 - 可编辑表格、多级列表、待办、代码高亮、脚注和文档内链接

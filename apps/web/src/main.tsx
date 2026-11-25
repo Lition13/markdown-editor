@@ -1,5 +1,5 @@
-import { MarkdownEditor, type MarkdownTheme } from "@lition13/markdown-editor";
-import { Download, FileText, FolderOpen, Github, Moon, Sun } from "lucide-react";
+import { MarkdownEditor, type MarkdownMode, type MarkdownTheme } from "@lition13/markdown-editor";
+import { CodeXml, Download, FileText, FolderOpen, Github, Moon, PencilLine, Sun } from "lucide-react";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@lition13/markdown-editor/style.css";
@@ -37,6 +37,7 @@ function App() {
   const [documentKey, setDocumentKey] = useState(0);
   const [ready, setReady] = useState(false);
   const [opening, setOpening] = useState(false);
+  const [mode, setMode] = useState<MarkdownMode>("live");
   const [theme, setTheme] = useState(readTheme);
   const [status, setStatus] = useState("正在读取草稿");
   const [error, setError] = useState("");
@@ -80,6 +81,7 @@ function App() {
       const value = await file.text();
       updateDraft({ name: file.name, value });
       setDocumentKey(key => key + 1);
+      setMode("live");
     } catch {
       setError("文件读取失败，请重新选择。");
     } finally {
@@ -134,6 +136,10 @@ function App() {
       <main className="workspace">
         <div className="workspace-header">
           <div className="document-name"><FileText size={17} aria-hidden="true" /><span>{draft.name}</span></div>
+          <div className="view-options" role="group" aria-label="文档视图">
+            <button type="button" aria-pressed={mode === "live"} disabled={!ready} onClick={() => setMode("live")}><PencilLine size={15} />编辑</button>
+            <button type="button" aria-pressed={mode === "source"} disabled={!ready} onClick={() => setMode("source")}><CodeXml size={16} />源码</button>
+          </div>
         </div>
         {error && <p className="file-error" role="alert">{error}</p>}
         {ready ? (
@@ -141,6 +147,8 @@ function App() {
             <MarkdownEditor
               key={documentKey}
               theme={theme}
+              mode={mode}
+              onModeChange={setMode}
               value={draft.value}
               onChange={value => updateDraft({ ...draft, value })}
             />

@@ -31,7 +31,7 @@ import {
   type RefObject,
 } from "react";
 import EditorDialog from "./EditorDialog";
-import { resolveMarkdownLink, useMarkdownEnvironment } from "./editorContext";
+import { resolveMarkdownLink, useMarkdownEnvironment, type MarkdownMode } from "./editorContext";
 import ActionMenu, { type ActionItem, type MenuPoint } from "./ActionMenu";
 import MarkdownTableSize from "./MarkdownTableSize";
 import { newMarkdownTable, serializeMarkdownTable, type TableSize } from "../core/markdownTable";
@@ -62,7 +62,6 @@ import {
   type TextSelection,
 } from "../core/markdown";
 import type { codeLanguages } from "../core/markdownCode";
-type Mode = "live" | "edit";
 type Snapshot = { value: string; selection: TextSelection };
 const InlineMarkdownEditor = lazy(() => import("./InlineMarkdownEditor"));
 
@@ -89,15 +88,21 @@ function textareaPoint(field: HTMLTextAreaElement, position: number): MenuPoint 
 export default function MarkdownNotes({
   value,
   onChange,
+  mode: controlledMode,
+  onModeChange,
   allowExpand = true,
 }: {
   value: string;
   onChange: (value: string) => void;
+  mode?: MarkdownMode;
+  onModeChange?: (mode: MarkdownMode) => void;
   allowExpand?: boolean;
 }) {
   const normalized = normalizeMarkdown(value);
-  const [mode, setMode] = useState<Mode>("live");
+  const [localMode, setLocalMode] = useState<MarkdownMode>("live");
+  const mode = controlledMode ?? localMode;
   const [focusLive, setFocusLive] = useState(false);
+  const wasInSourceMode = useRef(false);
   const [expanded, setExpanded] = useState(false);
   const [, refresh] = useState(0);
   const selection = useRef<TextSelection>({ start: 0, end: 0 });
@@ -105,6 +110,10 @@ export default function MarkdownNotes({
   const past = useRef<Snapshot[]>([]),
     future = useRef<Snapshot[]>([]);
   const last = useRef({ at: 0, kind: "" });
+  useLayoutEffect(() => {
+    if (mode === "source") wasInSourceMode.current = true;
+    last.current = { at: 0, kind: "" };
+  }, [mode]);
   useEffect(() => {
     if (normalized !== current.current) {
       current.current = normalized;
@@ -157,16 +166,15 @@ export default function MarkdownNotes({
       value={normalized}
       mode={mode}
       onMode={(next) => {
-        setFocusLive(next === "live");
-        setMode(next);
-        last.current = { at: 0, kind: "" };
+        if (controlledMode === undefined) setLocalMode(next);
+        onModeChange?.(next);
       }}
       onMove={() => { last.current = { at: 0, kind: "" }; }}
       commit={commit}
       onUndo={undo}
       canUndo={past.current.length > 0}
       canRedo={future.current.length > 0}
-      focusLive={focusLive}
+      focusLive={focusLive || wasInSourceMode.current}
       selection={selection}
       expanded={expanded}
       onExpand={allowExpand ? (expanded ? closeExpanded : () => setExpanded(true)) : undefined}
@@ -209,8 +217,8 @@ function Editor({
   onExpand,
 }: {
   value: string;
-  mode: Mode;
-  onMode: (mode: Mode) => void;
+  mode: MarkdownMode;
+  onMode: (mode: MarkdownMode) => void;
   onMove: () => void;
   commit: (value: string, kind?: string) => void;
   onUndo: (redo?: boolean) => TextSelection | null;
@@ -302,7 +310,7 @@ function Editor({
     focusAt(next);
   }, [value]);
   useLayoutEffect(() => {
-    if (mode === "edit") focusAt(selection.current);
+    if (mode === "source") focusAt(selection.current);
   }, [expanded, mode]);
   const format = (
     kind:
@@ -439,7 +447,7 @@ function Editor({
       const current = range();
       if (shortcut === "source") {
         selection.current = current;
-        onMode(mode === "live" ? "edit" : "live");
+        onMode(mode === "live" ? "source" : "live");
       } else if (shortcut === "expand") {
         selection.current = current;
         onExpand?.();
@@ -546,7 +554,7 @@ function Editor({
     option("undo", "撤销描述编辑", <Undo2 size={15} />, () => undoEdit(), "undo", keys.undo, !canUndo),
     option("redo", "重做描述编辑", <Redo2 size={15} />, () => undoEdit(true), "redo", keys.redo, !canRedo),
     mode === "live"
-      ? option("source", "编辑描述源码", <Code size={15} />, () => onMode("edit"), "source markdown", keys.source)
+      ? option("source", "编辑描述源码", <Code size={15} />, () => onMode("source"), "source markdown", keys.source)
       : option("live", "实时编辑描述", <Code size={15} />, () => onMode("live"), "live 正文", keys.source),
     ...(onExpand && !expanded ? [option("expand", "全屏编辑描述", <Maximize2 size={15} />, onExpand, "fullscreen", keys.expand)] : []),
     option("help", "Markdown 语法帮助", <HelpCircle size={15} />, () => showPanel("help"), "help", keys.help),

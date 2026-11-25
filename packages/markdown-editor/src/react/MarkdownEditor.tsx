@@ -6,6 +6,8 @@ import { defaultEnvironment, MarkdownEnvironment, type MarkdownEditorProps } fro
 export default function MarkdownEditor({
   value,
   onChange,
+  mode,
+  onModeChange,
   allowExpand,
   ariaLabel = defaultEnvironment.ariaLabel,
   placeholder = defaultEnvironment.placeholder,
@@ -45,7 +47,7 @@ export default function MarkdownEditor({
   return (
     <div className={`markdown-surface ${className}`} data-theme={theme} ref={surface}>
       <MarkdownEnvironment.Provider value={environment}>
-        <MarkdownNotes value={value} onChange={onChange} allowExpand={allowExpand} />
+        <MarkdownNotes value={value} onChange={onChange} mode={mode} onModeChange={onModeChange} allowExpand={allowExpand} />
       </MarkdownEnvironment.Provider>
     </div>
   );
