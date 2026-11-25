@@ -31,17 +31,21 @@ const ready = async (page: Page) => {
   await editSource(page);
 };
 const saved = async (page: Page) => {
-  await expect(page.locator(".save-status")).toHaveText(/草稿已保存|草稿已恢复/);
-  return page.evaluate(() => new Promise<string>((resolve, reject) => {
-    const dbRequest = indexedDB.open("lition13-markdown-editor", 1);
-    dbRequest.onerror = () => reject(dbRequest.error);
-    dbRequest.onsuccess = () => {
-      const db = dbRequest.result;
-      const request = db.transaction("drafts").objectStore("drafts").get("current");
-      request.onsuccess = () => { db.close(); resolve(request.result.value); };
-      request.onerror = () => { db.close(); reject(request.error); };
-    };
-  }));
+  await expect(page.locator(".save-status")).toHaveText("已保存到此浏览器");
+  return page.evaluate(async () => {
+    const result = <T>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const db = await result(indexedDB.open("lition13-markdown-editor", 2));
+    try {
+      const transaction = db.transaction(["settings", "contents"]);
+      const id = await result(transaction.objectStore("settings").get("active-file"));
+      return await result<string>(transaction.objectStore("contents").get(id));
+    } finally {
+      db.close();
+    }
+  });
 };
 const setTheme = async (page: Page, theme: string) => {
   const toggle = page.getByRole("button", { name: theme === "dark" ? "切换深色主题" : "切换浅色主题" });
@@ -276,7 +280,7 @@ test("围栏联想代码语言，回车继续输入，语言仅在编辑时可�
   await expect(language).toHaveValue("C++");
   const expected = "```cpp\nint main() {}\n// 注释\n```";
   expect(await saved(page)).toBe(expected);
-  await page.getByRole("button", { name: "下载 .md", exact: true }).focus();
+  await page.getByRole("button", { name: "文件管理", exact: true }).focus();
   await expect(language).toHaveCount(0);
   const rendered = page.locator(".notes-live-document pre code");
   await expect(rendered).toHaveClass(/language-cpp/);
@@ -1297,7 +1301,7 @@ test("描述快捷键只在编辑焦点内生效", async ({ page }) => {
   await ready(page);
   const original = "保留原文";
   await notes(page).fill(original);
-  await page.getByRole("button", { name: "下载 .md", exact: true }).focus();
+  await page.getByRole("button", { name: "文件管理", exact: true }).focus();
   await page.keyboard.press("Control+Shift+KeyQ");
   await page.keyboard.press("Alt+Shift+Digit5");
   await page.keyboard.press("Alt+KeyT");
