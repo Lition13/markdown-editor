@@ -943,7 +943,11 @@ test("描述正文只显示一次，光标局部揭示 Markdown 并直接编辑"
   await page.setViewportSize({ width: 760, height: 580 });
   await expect(notes(page)).toBeFocused();
   await notes(page).press("/");
-  await toolsMenu(page).getByRole("textbox", { name: "搜索描述工具" }).press("Escape");
+  const fullScreenSearch = toolsMenu(page).getByRole("textbox", { name: "搜索描述工具" });
+  await expect(fullScreenSearch).toBeFocused();
+  await page.setViewportSize({ width: 720, height: 560 });
+  await expect(fullScreenSearch).toBeFocused();
+  await fullScreenSearch.press("Escape");
   await expect(page.getByRole("dialog", { name: "编辑 Markdown", exact: true })).toBeVisible();
   await page.keyboard.insertText("并保存");
   await expect(live.locator(".cm-line").last()).toHaveText("记录完成并保存");

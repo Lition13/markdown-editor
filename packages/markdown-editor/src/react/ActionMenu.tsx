@@ -115,13 +115,16 @@ function MenuLevel({
       setPosition((previous) => previous.x === x && previous.y === y ? previous : { x, y });
     };
     place();
-    if (!anchor && !resolvePoint) return;
+    const owner = menu.ownerDocument;
+    const viewport = owner.defaultView;
     const observer = new ResizeObserver(place);
     observer.observe(menu);
-    document.addEventListener("scroll", place, true);
+    if (anchor || resolvePoint) owner.addEventListener("scroll", place, true);
+    viewport?.addEventListener("resize", place);
     return () => {
       observer.disconnect();
-      document.removeEventListener("scroll", place, true);
+      owner.removeEventListener("scroll", place, true);
+      viewport?.removeEventListener("resize", place);
     };
   }, [anchor, point.x, point.y, point.aboveY, items.length, query, resolvePoint, topInset]);
   useEffect(() => {
@@ -395,17 +398,14 @@ export default function ActionMenu({
       )
         close.current();
     };
-    const resize = () => close.current(false);
     document.addEventListener("mousedown", outside);
     document.addEventListener("contextmenu", outside);
     if (anchor) document.addEventListener("focusin", outside);
-    window.addEventListener("resize", resize);
     window.addEventListener("keydown", key);
     return () => {
       document.removeEventListener("mousedown", outside);
       document.removeEventListener("contextmenu", outside);
       if (anchor) document.removeEventListener("focusin", outside);
-      window.removeEventListener("resize", resize);
       window.removeEventListener("keydown", key);
     };
   }, [anchor, dialog, owner]);
