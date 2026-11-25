@@ -445,7 +445,7 @@ test("文件夹可以拖入其他文件夹或拖回上一级，原有子目录�
   await expect(targets).toBeHidden();
   await expect(folder).toBeVisible();
 
-  await dragInLibrary(page, folder, parent);
+  await dragInLibrary(page, folder, parent.locator(".."));
   await expect(folder).toHaveCount(0);
   await parent.click();
   await expect(folder).toBeVisible();
