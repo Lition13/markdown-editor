@@ -4,6 +4,13 @@ export interface FileEntry {
   id: string;
   name: string;
   revision: number;
+  folderId?: string | null;
+}
+
+export interface FolderEntry {
+  id: string;
+  name: string;
+  parentId: string | null;
 }
 
 export interface FileInput {
@@ -15,10 +22,12 @@ export type MarkdownFile = FileEntry & FileInput;
 
 interface FileLibrary {
   files: FileEntry[];
+  folders: FolderEntry[];
   current: MarkdownFile | null;
 }
 
 const filesStore = "files";
+const foldersStore = "folders";
 const textStore = "contents";
 const settingsStore = "settings";
 const activeKey = "active-file";
@@ -28,35 +37,50 @@ let connection: Promise<IDBDatabase> | undefined;
 export const exampleFile: MarkdownFile = { id: "example", revision: 0, ...example };
 const nameKey = (name: string) => name.normalize("NFC").toLowerCase();
 
-export function fileEntry({ id, name, revision }: FileEntry): FileEntry {
-  return { id, name, revision };
+export function fileEntry({ id, name, revision, folderId }: FileEntry): FileEntry {
+  return { id, name, revision, folderId };
 }
 
-export function sortedFiles(files: FileEntry[]) {
-  return [...files].sort((left, right) => nameOrder.compare(left.name, right.name));
+export function sortByName<T extends { name: string }>(entries: T[]) {
+  return [...entries].sort((left, right) => nameOrder.compare(left.name, right.name));
+}
+
+function cleanName(input: string, kind: "文件" | "文件夹") {
+  const name = input.trim();
+  if (!name || /^\.+$/.test(name) || /[/\\]/.test(name)) {
+    throw new Error("请输入有效的" + kind + "名称，名称不能包含斜杠。");
+  }
+  return name;
 }
 
 export function markdownName(input: string) {
-  const name = input.trim();
-  if (!name || /^\.+$/.test(name) || /[/\\]/.test(name)) {
-    throw new Error("请输入有效的文件名，文件名不能包含斜杠。");
-  }
+  const name = cleanName(input, "文件");
   return /\.(?:md|markdown|txt)$/i.test(name) ? name : name + ".md";
 }
 
-export function newFiles(inputs: FileInput[], existing: FileEntry[]): MarkdownFile[] {
-  const names = new Set(existing.map(file => nameKey(file.name)));
+function reserveName(stem: string, extension: string, names: Set<string>) {
+  let name = stem + extension;
+  for (let suffix = 2; names.has(nameKey(name)); suffix++) {
+    name = stem + " (" + suffix + ")" + extension;
+  }
+  names.add(nameKey(name));
+  return name;
+}
+
+function reserveFileName(name: string, names: Set<string>) {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? reserveName(name.slice(0, dot), name.slice(dot), names) : reserveName(name, "", names);
+}
+
+function namesInFolder(files: FileEntry[], folderId: string | null) {
+  return new Set(files.filter(file => (file.folderId ?? null) === folderId).map(file => nameKey(file.name)));
+}
+
+export function newFiles(inputs: FileInput[], existing: FileEntry[], folderId: string | null): MarkdownFile[] {
+  const names = namesInFolder(existing, folderId);
   return inputs.map(input => {
-    const dot = input.name.lastIndexOf(".");
-    const hasExtension = dot > 0;
-    const stem = hasExtension ? input.name.slice(0, dot) : input.name;
-    const extension = hasExtension ? input.name.slice(dot) : "";
-    let name = input.name;
-    for (let suffix = 2; names.has(nameKey(name)); suffix++) {
-      name = stem + " (" + suffix + ")" + extension;
-    }
-    names.add(nameKey(name));
-    return { id: crypto.randomUUID(), name, value: input.value, revision: 0 };
+    const name = reserveFileName(input.name, names);
+    return { id: crypto.randomUUID(), name, value: input.value, revision: 0, folderId };
   });
 }
 
@@ -64,10 +88,48 @@ export function renamedFile(files: FileEntry[], id: string, input: string): File
   const file = files.find(file => file.id === id);
   if (!file) throw new Error("这个文件已被移除。");
   const name = markdownName(input);
-  if (files.some(other => other.id !== id && nameKey(other.name) === nameKey(name))) {
+  if (files.some(other => other.id !== id && (other.folderId ?? null) === (file.folderId ?? null) && nameKey(other.name) === nameKey(name))) {
     throw new Error("已有同名文件，请换一个名称。");
   }
   return { ...file, name };
+}
+
+export function newFolder(folders: FolderEntry[], input: string, parentId: string | null): FolderEntry {
+  if (parentId !== null && !folders.some(folder => folder.id === parentId)) throw new Error("上一级文件夹已被移除。");
+  const names = new Set(folders.filter(folder => folder.parentId === parentId).map(folder => nameKey(folder.name)));
+  const name = reserveName(cleanName(input, "文件夹"), "", names);
+  return { id: crypto.randomUUID(), name, parentId };
+}
+
+export function renamedFolder(folders: FolderEntry[], id: string, input: string): FolderEntry {
+  const folder = folders.find(folder => folder.id === id);
+  if (!folder) throw new Error("这个文件夹已被移除。");
+  const name = cleanName(input, "文件夹");
+  if (folders.some(other => other.id !== id && other.parentId === folder.parentId && nameKey(other.name) === nameKey(name))) {
+    throw new Error("已有同名文件夹，请换一个名称。");
+  }
+  return { ...folder, name };
+}
+
+export function movedFile(files: FileEntry[], id: string, folderId: string | null): FileEntry {
+  const file = files.find(file => file.id === id);
+  if (!file) throw new Error("这个文件已被移除。");
+  if ((file.folderId ?? null) === folderId) return file;
+  return { ...file, folderId, name: reserveFileName(file.name, namesInFolder(files, folderId)) };
+}
+
+export function folderRemoval(folders: FolderEntry[], files: FileEntry[], id: string) {
+  const removed = folders.find(folder => folder.id === id);
+  if (!removed) throw new Error("这个文件夹已被移除。");
+  const folderNames = new Set(folders.filter(folder => folder.parentId === removed.parentId && folder.id !== id).map(folder => nameKey(folder.name)));
+  const fileNames = namesInFolder(files, removed.parentId);
+  const movedFolders = folders.filter(folder => folder.parentId === id).map(folder => ({
+    ...folder, parentId: removed.parentId, name: reserveName(folder.name, "", folderNames),
+  }));
+  const movedFiles = files.filter(file => file.folderId === id).map(file => ({
+    ...file, folderId: removed.parentId, name: reserveFileName(file.name, fileNames),
+  }));
+  return { removed, movedFolders, movedFiles };
 }
 
 function putFile(transaction: IDBTransaction, file: MarkdownFile) {
@@ -78,10 +140,12 @@ function putFile(transaction: IDBTransaction, file: MarkdownFile) {
 function database() {
   if (connection) return connection;
   const opening = new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open("lition13-markdown-editor", 2);
+    const request = indexedDB.open("lition13-markdown-editor", 3);
     let blocked = false;
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = event => {
       const db = request.result;
+      db.createObjectStore(foldersStore, { keyPath: "id" });
+      if (event.oldVersion >= 2) return;
       const transaction = request.transaction!;
       db.createObjectStore(filesStore, { keyPath: "id" });
       db.createObjectStore(textStore);
@@ -140,7 +204,7 @@ function read<T>(request: IDBRequest<T>): Promise<T> {
 
 async function transaction<T>(mode: IDBTransactionMode, action: (tx: IDBTransaction) => T | Promise<T>): Promise<T> {
   const db = await database();
-  const tx = db.transaction([filesStore, textStore, settingsStore], mode);
+  const tx = db.transaction([filesStore, textStore, settingsStore, foldersStore], mode);
   const done = new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onabort = () => reject(tx.error ?? new Error("文件操作中断，请重试。"));
@@ -163,13 +227,14 @@ async function withText(tx: IDBTransaction, entry: FileEntry): Promise<MarkdownF
 
 export function readLibrary(): Promise<FileLibrary> {
   return transaction("readonly", async tx => {
-    const [entries, active] = await Promise.all([
+    const [entries, folders, active] = await Promise.all([
       read<FileEntry[]>(tx.objectStore(filesStore).getAll()),
+      read<FolderEntry[]>(tx.objectStore(foldersStore).getAll()),
       read<string | undefined>(tx.objectStore(settingsStore).get(activeKey)),
     ]);
-    const files = sortedFiles(entries);
+    const files = sortByName(entries);
     const entry = files.find(file => file.id === active) ?? files[0];
-    return { files, current: entry ? await withText(tx, entry) : null };
+    return { files, folders: sortByName(folders), current: entry ? await withText(tx, entry) : null };
   });
 }
 
@@ -183,13 +248,21 @@ export function openFile(id: string): Promise<MarkdownFile> {
   });
 }
 
-export function addFiles(inputs: [FileInput, ...FileInput[]]): Promise<{ files: FileEntry[]; current: MarkdownFile }> {
+async function confirmFolder(tx: IDBTransaction, folderId: string | null) {
+  if (folderId !== null && !await read(tx.objectStore(foldersStore).getKey(folderId))) {
+    throw new Error("目标文件夹已被移除。");
+  }
+}
+
+export function addFiles(inputs: [FileInput, ...FileInput[]], folderId: string | null): Promise<{ files: FileEntry[]; current: MarkdownFile }> {
   return transaction("readwrite", async tx => {
-    const entries = await read<FileEntry[]>(tx.objectStore(filesStore).getAll());
-    const created = newFiles(inputs, entries);
+    const [entries] = await Promise.all([
+      read<FileEntry[]>(tx.objectStore(filesStore).getAll()), confirmFolder(tx, folderId),
+    ]);
+    const created = newFiles(inputs, entries, folderId);
     for (const file of created) putFile(tx, file);
     tx.objectStore(settingsStore).put(created[0].id, activeKey);
-    return { files: sortedFiles([...entries, ...created.map(fileEntry)]), current: created[0] };
+    return { files: sortByName([...entries, ...created.map(fileEntry)]), current: created[0] };
   });
 }
 
@@ -202,7 +275,7 @@ export function renameFile(id: string, input: string): Promise<FileEntry> {
   });
 }
 
-export function removeFile(id: string, currentId: string | undefined): Promise<FileLibrary> {
+export function removeFile(id: string, currentId: string | undefined): Promise<Pick<FileLibrary, "files" | "current">> {
   return transaction("readwrite", async tx => {
     const files = tx.objectStore(filesStore);
     const settings = tx.objectStore(settingsStore);
@@ -210,8 +283,10 @@ export function removeFile(id: string, currentId: string | undefined): Promise<F
       read<FileEntry[]>(files.getAll()),
       read<string | undefined>(settings.get(activeKey)),
     ]);
-    const remaining = sortedFiles(entries.filter(file => file.id !== id));
-    const next = remaining.find(file => file.id === currentId) ?? remaining[0];
+    const remaining = sortByName(entries.filter(file => file.id !== id));
+    const removedFolder = entries.find(file => file.id === id)?.folderId ?? null;
+    const next = remaining.find(file => file.id === currentId)
+      ?? remaining.find(file => (file.folderId ?? null) === removedFolder) ?? remaining[0];
     files.delete(id);
     tx.objectStore(textStore).delete(id);
     if (id === currentId || id === active) {
@@ -219,6 +294,49 @@ export function removeFile(id: string, currentId: string | undefined): Promise<F
       else settings.delete(activeKey);
     }
     return { files: remaining, current: id === currentId && next ? await withText(tx, next) : null };
+  });
+}
+
+export function addFolder(name: string, parentId: string | null): Promise<FolderEntry> {
+  return transaction("readwrite", async tx => {
+    const store = tx.objectStore(foldersStore);
+    const folder = newFolder(await read<FolderEntry[]>(store.getAll()), name, parentId);
+    store.add(folder);
+    return folder;
+  });
+}
+
+export function renameFolder(id: string, name: string): Promise<FolderEntry> {
+  return transaction("readwrite", async tx => {
+    const store = tx.objectStore(foldersStore);
+    const folder = renamedFolder(await read<FolderEntry[]>(store.getAll()), id, name);
+    store.put(folder);
+    return folder;
+  });
+}
+
+export function moveFile(id: string, folderId: string | null): Promise<FileEntry> {
+  return transaction("readwrite", async tx => {
+    const store = tx.objectStore(filesStore);
+    const [entries] = await Promise.all([read<FileEntry[]>(store.getAll()), confirmFolder(tx, folderId)]);
+    const file = movedFile(entries, id, folderId);
+    store.put(file);
+    return file;
+  });
+}
+
+export function removeFolder(id: string): Promise<ReturnType<typeof folderRemoval>> {
+  return transaction("readwrite", async tx => {
+    const files = tx.objectStore(filesStore);
+    const folders = tx.objectStore(foldersStore);
+    const [folderEntries, fileEntries] = await Promise.all([
+      read<FolderEntry[]>(folders.getAll()), read<FileEntry[]>(files.getAll()),
+    ]);
+    const result = folderRemoval(folderEntries, fileEntries, id);
+    for (const folder of result.movedFolders) folders.put(folder);
+    for (const file of result.movedFiles) files.put(file);
+    folders.delete(id);
+    return result;
   });
 }
 

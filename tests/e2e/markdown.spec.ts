@@ -5,6 +5,7 @@ import { classSamples } from "../fixtures/class-fixtures.mjs";
 import { sequenceSamples } from "../fixtures/sequence-fixtures.mjs";
 import { erSamples } from "../fixtures/er-fixtures.mjs";
 import { erLayoutIssues } from "../fixtures/er-layout-checks.mjs";
+import { fileManager, revealToolbar } from "./workbench";
 const notes = (page: Page) =>
   page.getByRole("textbox", { name: "Markdown 正文", exact: true });
 const rendered = (page: Page) => page.locator(".notes-live-document");
@@ -37,7 +38,7 @@ const saved = async (page: Page) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
-    const db = await result(indexedDB.open("lition13-markdown-editor", 2));
+    const db = await result(indexedDB.open("lition13-markdown-editor"));
     try {
       const transaction = db.transaction(["settings", "contents"]);
       const id = await result(transaction.objectStore("settings").get("active-file"));
@@ -48,8 +49,10 @@ const saved = async (page: Page) => {
   });
 };
 const setTheme = async (page: Page, theme: string) => {
+  await revealToolbar(page);
   const toggle = page.getByRole("button", { name: theme === "dark" ? "切换深色主题" : "切换浅色主题" });
   if (await toggle.isVisible()) await toggle.click();
+  await page.mouse.move(25, 110);
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
 };
 const select = async (page: Page, start: number, end: number) => {
@@ -175,8 +178,7 @@ test("逐字输入三反引号仍可打开代码语言建议并继续成对编�
 test("首击在正文准确落下光标，斜杠菜单按选区应用工具", async ({ page }) => {
   await page.goto("./");
   await expect(page.locator(".save-status")).toHaveText("示例文档");
-  await page.getByRole("button", { name: "文件管理", exact: true }).click();
-  const files = page.getByRole("dialog", { name: "文件管理" });
+  const files = await fileManager(page);
   await files.getByLabel("选择 Markdown 文件").setInputFiles({
     name: "首击验收.md", mimeType: "text/markdown", buffer: Buffer.from("这里是一段可点击定位的正文。\n\n下一段"),
   });
@@ -282,7 +284,7 @@ test("围栏联想代码语言，回车继续输入，语言仅在编辑时可�
   await expect(language).toHaveValue("C++");
   const expected = "```cpp\nint main() {}\n// 注释\n```";
   expect(await saved(page)).toBe(expected);
-  await page.getByRole("button", { name: "文件管理", exact: true }).focus();
+  await page.getByRole("button", { name: "顶部工具栏", exact: true }).focus();
   await expect(language).toHaveCount(0);
   const rendered = page.locator(".notes-live-document pre code");
   await expect(rendered).toHaveClass(/language-cpp/);
@@ -1303,7 +1305,7 @@ test("描述快捷键只在编辑焦点内生效", async ({ page }) => {
   await ready(page);
   const original = "保留原文";
   await notes(page).fill(original);
-  await page.getByRole("button", { name: "文件管理", exact: true }).focus();
+  await page.getByRole("button", { name: "顶部工具栏", exact: true }).focus();
   await page.keyboard.press("Control+Shift+KeyQ");
   await page.keyboard.press("Alt+Shift+Digit5");
   await page.keyboard.press("Alt+KeyT");

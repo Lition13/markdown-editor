@@ -1,8 +1,12 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, type Ref } from "react";
 import { safeMarkdownUrl } from "../core/markdown";
 
 export type MarkdownTheme = "light" | "dark";
 export type MarkdownMode = "live" | "source";
+
+export interface MarkdownEditorHandle {
+  focusAt(offset: number): void;
+}
 
 export interface MarkdownOptions {
   theme?: MarkdownTheme;
@@ -13,6 +17,7 @@ export interface MarkdownOptions {
 }
 
 export interface MarkdownEditorProps extends MarkdownOptions {
+  ref?: Ref<MarkdownEditorHandle>;
   value: string;
   onChange: (value: string) => void;
   mode?: MarkdownMode;

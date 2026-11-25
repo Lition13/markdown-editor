@@ -25,13 +25,15 @@ import {
   lazy,
   Suspense,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
+  type Ref,
   type RefObject,
 } from "react";
 import EditorDialog from "./EditorDialog";
-import { resolveMarkdownLink, useMarkdownEnvironment, type MarkdownMode } from "./editorContext";
+import { resolveMarkdownLink, useMarkdownEnvironment, type MarkdownEditorHandle, type MarkdownMode } from "./editorContext";
 import ActionMenu, { type ActionItem, type MenuPoint } from "./ActionMenu";
 import MarkdownTableSize from "./MarkdownTableSize";
 import { newMarkdownTable, serializeMarkdownTable, type TableSize } from "../core/markdownTable";
@@ -85,13 +87,34 @@ function textareaPoint(field: HTMLTextAreaElement, position: number) {
   return { x: rect.left, y: rect.bottom + 5, aboveY: rect.top };
 }
 
+function revealSourceCaret(field: HTMLTextAreaElement, align?: "start") {
+  const viewport = field.ownerDocument.defaultView;
+  if (!viewport) return;
+  const bounds = field.getBoundingClientRect();
+  if (viewport.getComputedStyle(field).getPropertyValue("field-sizing") !== "content") {
+    if (align === "start" && field.scrollHeight > field.clientHeight) {
+      field.scrollTop += textareaPoint(field, field.selectionEnd).aboveY - bounds.top - 8;
+    }
+    return;
+  }
+  const styles = viewport.getComputedStyle(field.ownerDocument.documentElement);
+  const top = (parseFloat(styles.scrollPaddingTop) || 0) + 8;
+  const bottom = viewport.innerHeight - (parseFloat(styles.scrollPaddingBottom) || 0) - 8;
+  if (!align && bounds.top >= top && bounds.bottom <= bottom) return;
+  const caret = textareaPoint(field, field.selectionEnd);
+  if (align === "start" || caret.aboveY < top) viewport.scrollBy(0, caret.aboveY - top);
+  else if (caret.y > bottom) viewport.scrollBy(0, caret.y - bottom);
+}
+
 export default function MarkdownNotes({
+  editorRef,
   value,
   onChange,
   mode: controlledMode,
   onModeChange,
   allowExpand = true,
 }: {
+  editorRef?: Ref<MarkdownEditorHandle>;
   value: string;
   onChange: (value: string) => void;
   mode?: MarkdownMode;
@@ -163,6 +186,7 @@ export default function MarkdownNotes({
   };
   const editor = (
     <Editor
+      editorRef={editorRef}
       value={normalized}
       mode={mode}
       onMode={(next) => {
@@ -203,6 +227,7 @@ export default function MarkdownNotes({
   );
 }
 function Editor({
+  editorRef,
   value,
   mode,
   onMode,
@@ -216,6 +241,7 @@ function Editor({
   expanded,
   onExpand,
 }: {
+  editorRef?: Ref<MarkdownEditorHandle>;
   value: string;
   mode: MarkdownMode;
   onMode: (mode: MarkdownMode) => void;
@@ -246,16 +272,17 @@ function Editor({
     [label, setLabel] = useState(""),
     [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [focusOnLoad, setFocusOnLoad] = useState(false);
   useEffect(() => {
     active.current = true;
     return () => {
       active.current = false;
     };
   }, []);
-  const focusAt = (range: TextSelection) => {
+  const focusAt = (range: TextSelection, align?: "start") => {
     selection.current = range;
     if (inline.current) {
-      inline.current.focus(range);
+      inline.current.focus(range, align);
       return;
     }
     const editor = ref.current;
@@ -263,7 +290,18 @@ function Editor({
     const local = clampSelection(editor.value, range);
     editor.focus({ preventScroll: true });
     editor.setSelectionRange(local.start, local.end);
+    if (align) revealSourceCaret(editor, align);
   };
+  useImperativeHandle(editorRef, () => ({
+    focusAt(offset) {
+      const position = Number.isFinite(offset) ? Math.trunc(offset) : 0;
+      setTools(null);
+      setPanel(null);
+      onMove();
+      focusAt(clampSelection(value, { start: position, end: position }), "start");
+      if (!inline.current && !ref.current) setFocusOnLoad(true);
+    },
+  }));
   const sourceSelection = (field: HTMLTextAreaElement) => ({ start: field.selectionStart, end: field.selectionEnd });
   const range = () => inline.current?.selection() ?? (ref.current ? sourceSelection(ref.current) : selection.current);
   const pointAt = (position: number) => inline.current?.point(position) ?? (ref.current ? textareaPoint(ref.current, position) : undefined);
@@ -312,17 +350,7 @@ function Editor({
   useLayoutEffect(() => {
     if (mode !== "source") return;
     focusAt(selection.current);
-    const field = ref.current;
-    const viewport = field?.ownerDocument.defaultView;
-    if (!field || !viewport || viewport.getComputedStyle(field).getPropertyValue("field-sizing") !== "content") return;
-    const padding = parseFloat(viewport.getComputedStyle(field.ownerDocument.documentElement).scrollPaddingTop) || 0;
-    const top = padding + 8;
-    const bottom = viewport.innerHeight - 8;
-    const bounds = field.getBoundingClientRect();
-    if (bounds.top >= top && bounds.bottom <= bottom) return;
-    const caret = textareaPoint(field, field.selectionEnd);
-    if (caret.aboveY < top) viewport.scrollBy(0, caret.aboveY - top);
-    else if (caret.y > bottom) viewport.scrollBy(0, caret.y - bottom);
+    if (ref.current) revealSourceCaret(ref.current);
   }, [expanded, mode]);
   const format = (
     kind:
@@ -654,7 +682,7 @@ function Editor({
                 ref={inline}
                 value={value}
                 cursor={selection}
-                focusOnMount={focusLive || expanded}
+                focusOnMount={focusOnLoad ? "start" : focusLive || expanded}
                 onEdit={(next, before, after, kind) => {
                   selection.current = before;
                   commit(next, kind);

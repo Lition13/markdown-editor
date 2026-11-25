@@ -4,6 +4,7 @@ import MarkdownNotes from "./MarkdownNotes";
 import { defaultEnvironment, MarkdownEnvironment, type MarkdownEditorProps } from "./editorContext";
 
 export default function MarkdownEditor({
+  ref,
   value,
   onChange,
   mode,
@@ -47,7 +48,7 @@ export default function MarkdownEditor({
   return (
     <div className={`markdown-surface ${className}`} data-theme={theme} ref={surface}>
       <MarkdownEnvironment.Provider value={environment}>
-        <MarkdownNotes value={value} onChange={onChange} mode={mode} onModeChange={onModeChange} allowExpand={allowExpand} />
+        <MarkdownNotes editorRef={ref} value={value} onChange={onChange} mode={mode} onModeChange={onModeChange} allowExpand={allowExpand} />
       </MarkdownEnvironment.Provider>
     </div>
   );

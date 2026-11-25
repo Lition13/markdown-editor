@@ -20,7 +20,7 @@ export type MarkdownKeystroke = Pick<KeyboardEvent,
 >;
 export interface InlineMarkdownHandle {
   selection(): TextSelection;
-  focus(range: TextSelection): void;
+  focus(range: TextSelection, align?: "start"): void;
   point(position: number): MenuPoint | undefined;
   setHeading(depth: number): boolean;
   insertTable(source: string, range: TextSelection): void;
@@ -30,7 +30,7 @@ type Props = {
   ref: Ref<InlineMarkdownHandle>;
   value: string;
   cursor: RefObject<TextSelection>;
-  focusOnMount: boolean;
+  focusOnMount: boolean | "start";
   onEdit(value: string, before: TextSelection, after: TextSelection, kind?: string): void;
   onMove(): void;
   onKey(event: MarkdownKeystroke, composing: boolean): boolean;
@@ -176,6 +176,26 @@ export default function InlineMarkdownEditor(props: Props) {
   const latest = useRef(props);
   latest.current = props;
 
+  function revealAtStart(view: EditorView, selection: { anchor: number; head: number }) {
+    const owner = view.dom.ownerDocument;
+    const style = getComputedStyle(owner.documentElement);
+    const top = (parseFloat(style.scrollPaddingTop) || 0) + 8;
+    const bottom = parseFloat(style.scrollPaddingBottom) || 0;
+    const effects = EditorView.scrollIntoView(selection.head, { y: "start", yMargin: top });
+    view.dispatch({ selection, effects });
+    const selectedDocument = view.state.doc;
+    const viewport = owner.defaultView;
+    viewport?.requestAnimationFrame(() => {
+      if (editor.current !== view || view.state.doc !== selectedDocument || view.state.selection.main.head !== selection.head) return;
+      // The projected lines can grow after a distant section enters the viewport.
+      const caret = view.coordsAtPos(selection.head);
+      const scroller = view.scrollDOM.getBoundingClientRect();
+      if (!caret || caret.top < Math.max(top, scroller.top) || caret.bottom > Math.min(viewport.innerHeight - bottom, scroller.bottom)) {
+        view.dispatch({ effects });
+      }
+    });
+  }
+
   useImperativeHandle(props.ref, () => ({
     selection: () => editor.current ? sourceSelection(editor.current.state) : latest.current.cursor.current,
     point: position => editor.current ? caretPoint(editor.current, position) : undefined,
@@ -192,11 +212,13 @@ export default function InlineMarkdownEditor(props: Props) {
         selection: { anchor: next.start }, scrollIntoView: true, userEvent: "input.structure",
       });
     },
-    focus(range) {
+    focus(range, align) {
       const view = editor.current;
       if (!view) return;
       view.focus();
-      view.dispatch({ selection: select(view.state.doc.toString(), range), scrollIntoView: true });
+      const selection = select(view.state.doc.toString(), range);
+      if (align === "start") revealAtStart(view, selection);
+      else view.dispatch({ selection, scrollIntoView: true });
     },
   }), []);
 
@@ -332,7 +354,11 @@ export default function InlineMarkdownEditor(props: Props) {
       }),
     });
     editor.current = view;
-    if (latest.current.focusOnMount) {
+    const initialFocus = latest.current.focusOnMount;
+    if (initialFocus === "start") {
+      view.focus();
+      revealAtStart(view, select(value, cursor.current));
+    } else if (initialFocus) {
       view.focus();
       const padding = parseFloat(getComputedStyle(view.dom.ownerDocument.documentElement).scrollPaddingTop) || 0;
       view.dispatch({ effects: EditorView.scrollIntoView(view.state.selection.main.head, { yMargin: padding + 8 }) });

@@ -1,10 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { expect, test, type Page } from "@playwright/test";
-
-async function fileManager(page: Page) {
-  await page.getByRole("button", { name: "文件管理", exact: true }).click();
-  return page.getByRole("dialog", { name: "文件管理", exact: true });
-}
+import { expect, test } from "@playwright/test";
+import { fileManager, revealToolbar } from "./workbench";
 
 test("导入 Markdown、编辑、刷新恢复、导出并重新导入", async ({ page }) => {
   const source = [
@@ -28,6 +24,7 @@ test("导入 Markdown、编辑、刷新恢复、导出并重新导入", async ({
   await page.goto("./");
   await expect(status).toHaveText("示例文档");
   await expect(editor).toBeVisible();
+  await revealToolbar(page);
   await expect(liveMode).toHaveAttribute("aria-pressed", "true");
   await expect(sourceMode).toHaveAttribute("aria-pressed", "false");
   let files = await fileManager(page);
@@ -35,6 +32,7 @@ test("导入 Markdown、编辑、刷新恢复、导出并重新导入", async ({
     name: "验收.markdown", mimeType: "text/markdown", buffer: Buffer.from(source),
   });
   await expect(page.locator(".document-name")).toHaveText("验收.markdown");
+  await revealToolbar(page);
   await sourceMode.click();
   await expect(sourceMode).toHaveAttribute("aria-pressed", "true");
   await expect(editor).toHaveValue(source);
@@ -45,6 +43,7 @@ test("导入 Markdown、编辑、刷新恢复、导出并重新导入", async ({
   await editor.press("Control+Home");
   await editor.press("ArrowRight");
   await editor.press("ArrowRight");
+  await revealToolbar(page);
   await liveMode.click();
   await expect(editor).toBeFocused();
   await expect(page.getByRole("table")).toContainText("已编辑");
@@ -52,16 +51,19 @@ test("导入 Markdown、编辑、刷新恢复、导出并重新导入", async ({
   await expect.poll(() => editor.evaluate(field => (field as HTMLTextAreaElement).selectionStart)).toBe(2);
 
   await editor.press("Control+/");
+  await revealToolbar(page);
   await expect(liveMode).toHaveAttribute("aria-pressed", "true");
   await editor.press("/");
   const commands = page.getByRole("menu", { name: "描述工具" });
   await commands.getByRole("textbox", { name: "搜索描述工具" }).fill("编辑描述源码");
   await commands.getByRole("menuitem", { name: "编辑描述源码", exact: true }).click();
+  await revealToolbar(page);
   await expect(sourceMode).toHaveAttribute("aria-pressed", "true");
   await expect(editor).toHaveValue(edited);
 
   await page.reload();
   await expect(status).toHaveText("已保存到此浏览器");
+  await revealToolbar(page);
   await expect(liveMode).toHaveAttribute("aria-pressed", "true");
   await editor.press("Control+/");
   await expect(sourceMode).toHaveAttribute("aria-pressed", "true");
@@ -77,6 +79,7 @@ test("导入 Markdown、编辑、刷新恢复、导出并重新导入", async ({
     name: file.suggestedFilename(), mimeType: "text/markdown", buffer: Buffer.from(content),
   });
   await expect(page.locator(".document-name")).toHaveText("验收.md");
+  await revealToolbar(page);
   await expect(liveMode).toHaveAttribute("aria-pressed", "true");
   const document = page.locator(".notes-live-document");
   await expect(document.getByRole("table")).toContainText("已编辑");
@@ -90,6 +93,7 @@ test("源码占用同一块正文区，长文档随页面滚动", async ({ page 
   const modes = page.getByRole("group", { name: "文档视图" });
   const liveMode = modes.getByRole("button", { name: "编辑", exact: true });
   const sourceMode = modes.getByRole("button", { name: "源码", exact: true });
+  await revealToolbar(page);
   await expect(sourceMode).toBeEnabled();
   const files = await fileManager(page);
   await files.getByLabel("选择 Markdown 文件").setInputFiles({
@@ -97,6 +101,7 @@ test("源码占用同一块正文区，长文档随页面滚动", async ({ page 
   });
   await expect(editor).toHaveText("一段简短的正文");
   const editBounds = await editor.boundingBox();
+  await revealToolbar(page);
   await sourceMode.click();
   await expect(editor).toHaveValue("一段简短的正文");
   expect(await editor.boundingBox()).toEqual(editBounds);
@@ -116,13 +121,15 @@ test("源码占用同一块正文区，长文档随页面滚动", async ({ page 
   const offset = longSource.indexOf(target);
   await editor.evaluate((field, position) => (field as HTMLTextAreaElement).setSelectionRange(position, position), offset);
   await editor.press("Control+/");
+  await revealToolbar(page);
   await expect(liveMode).toHaveAttribute("aria-pressed", "true");
   await expect(editor).toBeFocused();
   await expect.poll(() => page.evaluate(() => {
     const focus = window.getSelection();
     const caret = focus?.rangeCount ? focus.getRangeAt(0).getBoundingClientRect() : undefined;
-    const header = document.querySelector(".workspace-header")!.getBoundingClientRect();
-    return { text: focus?.focusNode?.textContent, visible: !!caret && caret.top >= header.bottom && caret.bottom <= innerHeight };
+    const toolbar = document.querySelector(".app-header")!.getBoundingClientRect();
+    const status = document.querySelector(".workspace-footer")!.getBoundingClientRect();
+    return { text: focus?.focusNode?.textContent, visible: !!caret && caret.top >= toolbar.bottom && caret.bottom <= status.top };
   })).toEqual({ text: target, visible: true });
   await expect(sourceMode).toBeInViewport({ ratio: 1 });
   await sourceMode.click();
@@ -133,8 +140,9 @@ test("源码占用同一块正文区，长文档随页面滚动", async ({ page 
     const lineHeight = parseFloat(style.lineHeight);
     const precedingLines = area.value.slice(0, area.selectionEnd).split("\n").length - 1;
     const top = area.getBoundingClientRect().top + parseFloat(style.paddingTop) + precedingLines * lineHeight;
-    const header = document.querySelector(".workspace-header")!.getBoundingClientRect();
-    return { offset: area.selectionEnd, visible: top >= header.bottom && top + lineHeight <= innerHeight };
+    const toolbar = document.querySelector(".app-header")!.getBoundingClientRect();
+    const status = document.querySelector(".workspace-footer")!.getBoundingClientRect();
+    return { offset: area.selectionEnd, visible: top >= toolbar.bottom && top + lineHeight <= status.top };
   })).toEqual({ offset, visible: true });
 });
 
@@ -144,9 +152,10 @@ test("文件管理支持新建、批量导入、搜索、重命名和删除", as
   await files.getByRole("button", { name: "新建", exact: true }).click();
   await files.getByLabel("新建文件名", { exact: true }).fill("旅行计划");
   await files.getByRole("button", { name: "创建", exact: true }).click();
-  await expect(files).toBeHidden();
+  await expect(files).toBeVisible();
   await expect(page.locator(".document-name")).toHaveText("旅行计划.md");
   const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
+  await revealToolbar(page);
   await page.getByRole("button", { name: "源码", exact: true }).click();
   await editor.fill("保存在各自文件中的编辑内容");
 
@@ -157,7 +166,7 @@ test("文件管理支持新建、批量导入、搜索、重命名和删除", as
     { name: "读书笔记.md", mimeType: "text/markdown", buffer: Buffer.from("第一份笔记") },
     { name: "读书笔记.md", mimeType: "text/markdown", buffer: Buffer.from("第二份笔记") },
   ]);
-  await expect(files).toBeHidden();
+  await expect(files).toBeVisible();
   await expect(page.locator(".document-name")).toHaveText("读书笔记.md");
   await expect(editor).toHaveText("第一份笔记");
 
@@ -213,6 +222,7 @@ test("旧版草稿完整迁入文件库，删除最后一份后保持空库", as
 
   await page.goto("./");
   await expect(page.locator(".document-name")).toHaveText(legacy.name);
+  await revealToolbar(page);
   await page.getByRole("button", { name: "源码", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Markdown 正文", exact: true })).toHaveValue(legacy.value);
   await page.reload();
@@ -233,7 +243,9 @@ test("两个标签页编辑同一文件时保留已保存内容，并可导出�
   await second.goto("./");
   const source = { name: "源码", exact: true };
   const editor = { name: "Markdown 正文", exact: true };
+  await revealToolbar(page);
   await page.getByRole("button", source).click();
+  await revealToolbar(second);
   await second.getByRole("button", source).click();
   await page.getByRole("textbox", editor).fill("先保存的版本");
   await expect(page.locator(".save-status")).toHaveText("已保存到此浏览器");
@@ -246,6 +258,137 @@ test("两个标签页编辑同一文件时保留已保存内容，并可导出�
   expect(await readFile(await (await download).path(), "utf8")).toBe("另一页正在编辑的版本");
   await second.reload();
   await expect(second.getByRole("textbox", editor)).toHaveText("先保存的版本");
+});
+
+test("工作台铺满窗口，顶栏悬浮，字词和行数实时更新并记住状态栏偏好", async ({ page }) => {
+  await page.goto("./");
+  const toolbar = page.locator("#workbench-toolbar");
+  const handle = page.getByRole("button", { name: "顶部工具栏" });
+  const footer = page.locator("#workspace-status");
+  await expect(page.getByRole("complementary", { name: "文件管理" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "文档大纲" })).toBeVisible();
+  await expect(toolbar).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Markdown 编辑器", exact: true })).toHaveCount(0);
+  await expect.poll(() => page.locator(".workbench").evaluate(shell => {
+    return Math.round(shell.getBoundingClientRect().width) === document.documentElement.clientWidth;
+  })).toBe(true);
+  await handle.hover();
+  await expect(toolbar).toBeVisible();
+  await page.mouse.move(550, 180);
+  await expect(toolbar).toBeHidden();
+
+  await revealToolbar(page);
+  await toolbar.getByRole("button", { name: "状态栏", exact: true }).click();
+  await expect(footer).toBeHidden();
+  await toolbar.getByRole("button", { name: "状态栏", exact: true }).hover();
+  await expect(toolbar.getByRole("button", { name: "状态栏", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await page.reload();
+  await expect(footer).toBeHidden();
+  await handle.press("Enter");
+  await expect(toolbar).toBeVisible();
+  await toolbar.getByRole("button", { name: "状态栏", exact: true }).click();
+  await expect(footer).toBeVisible();
+  await toolbar.getByRole("button", { name: "源码", exact: true }).click();
+  await page.getByRole("textbox", { name: "Markdown 正文", exact: true }).fill("# 项目\n\n写作 hello world");
+  const stats = footer.getByRole("group", { name: "文档统计" });
+  await expect(stats.getByText("6 字词", { exact: true })).toBeVisible();
+  await expect(stats.getByText("3 行", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(stats.getByText("6 字词", { exact: true })).toBeVisible();
+});
+
+test("大纲识别实际标题，从正文和源码跳到长文档中的章节", async ({ page }) => {
+  const source = [
+    "# 开头", "", "\x60\x60\x60md", "## 代码块里的标题", "\x60\x60\x60", "",
+    ...Array.from({ length: 84 }, (_, index) => "第 " + (index + 1) + " 段记录\n"),
+    "收尾事项", "----", "", "最后的正文。",
+  ].join("\n");
+  await page.goto("./");
+  const files = await fileManager(page);
+  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+    name: "长文档.md", mimeType: "text/markdown", buffer: Buffer.from(source),
+  });
+  const outline = page.getByRole("complementary", { name: "文档大纲" });
+  await expect(outline.getByRole("button", { name: "代码块里的标题", exact: true })).toHaveCount(0);
+  const ending = outline.getByRole("button", { name: "收尾事项", exact: true });
+  await ending.click();
+  await expect(ending).toHaveAttribute("aria-current", "location");
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(500);
+  const renderedHeading = page.getByRole("main").getByRole("heading", { name: /收尾事项/ });
+  await expect(renderedHeading).toBeInViewport();
+  const toolbar = await revealToolbar(page);
+  await toolbar.getByRole("button", { name: "源码", exact: true }).click();
+  const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
+  await expect(editor).toHaveValue(source);
+  await outline.getByRole("button", { name: "开头", exact: true }).click();
+  await expect.poll(() => editor.evaluate(field => (field as HTMLTextAreaElement).selectionStart)).toBe(0);
+  await ending.click();
+  await expect.poll(() => editor.evaluate(field => (field as HTMLTextAreaElement).selectionStart)).toBe(source.indexOf("收尾事项"));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(500);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(outline).toHaveCount(0);
+  await revealToolbar(page);
+  await toolbar.getByRole("button", { name: "文档大纲", exact: true }).click();
+  const drawer = page.getByRole("dialog", { name: "文档大纲" });
+  await drawer.getByRole("button", { name: "开头", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  await expect(editor).toBeFocused();
+  await expect.poll(() => editor.evaluate(field => (field as HTMLTextAreaElement).selectionStart)).toBe(0);
+});
+
+test("升级旧版文件库后可创建子文件夹、导入和移动，删除文件夹保留原文", async ({ page }) => {
+  const legacy = { id: "old-file", name: "记录.md", value: "旧版文件内容" };
+  await page.route("**/markdown-editor/seed-v2", route => route.fulfill({ contentType: "text/html", body: "<!doctype html>" }));
+  await page.goto("./seed-v2");
+  await page.evaluate(file => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open("lition13-markdown-editor", 2);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      db.createObjectStore("files", { keyPath: "id" }).add({ id: file.id, name: file.name, revision: 0 });
+      db.createObjectStore("contents").add(file.value, file.id);
+      db.createObjectStore("settings").add(file.id, "active-file");
+    };
+    request.onsuccess = () => { request.result.close(); resolve(); };
+    request.onerror = () => reject(request.error);
+  }), legacy);
+  await page.goto("./");
+  const files = await fileManager(page);
+  const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
+  await expect(editor).toHaveText(legacy.value);
+
+  for (const name of ["项目", "会议"]) {
+    await files.getByRole("button", { name: "新建文件夹", exact: true }).click();
+    await files.getByLabel("文件夹名称", { exact: true }).fill(name);
+    await files.getByRole("button", { name: "创建", exact: true }).click();
+    await expect(files.getByRole("navigation", { name: "文件夹路径" }).getByText(name, { exact: true })).toBeVisible();
+  }
+  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+    name: "记录.md", mimeType: "text/markdown", buffer: Buffer.from("刚导入的不同正文"),
+  });
+  await expect(editor).toHaveText("刚导入的不同正文");
+  await files.getByRole("button", { name: "文件库", exact: true }).click();
+  await files.getByRole("button", { name: "移动 记录.md", exact: true }).click();
+  await files.getByRole("combobox").selectOption({ label: "项目 / 会议" });
+  await files.getByRole("button", { name: "移动", exact: true }).click();
+  await files.getByRole("button", { name: "项目", exact: true }).click();
+  await files.getByRole("button", { name: "会议", exact: true }).click();
+  await files.getByRole("button", { name: "记录 (2).md", exact: true }).click();
+  await expect(editor).toHaveText(legacy.value);
+
+  await page.reload();
+  await expect(files.getByRole("navigation", { name: "文件夹路径" }).getByText("会议", { exact: true })).toBeVisible();
+  await expect(editor).toHaveText(legacy.value);
+  await files.getByRole("button", { name: "文件库", exact: true }).click();
+  await files.getByRole("button", { name: "删除文件夹 项目", exact: true }).click();
+  await files.getByRole("button", { name: "确认删除", exact: true }).click();
+  await expect(files.getByRole("button", { name: "项目", exact: true })).toHaveCount(0);
+  await files.getByRole("button", { name: "删除文件夹 会议", exact: true }).click();
+  await files.getByRole("button", { name: "确认删除", exact: true }).click();
+  await files.getByRole("button", { name: "记录.md", exact: true }).click();
+  await expect(editor).toHaveText("刚导入的不同正文");
+  await files.getByRole("button", { name: "记录 (2).md", exact: true }).click();
+  await expect(editor).toHaveText(legacy.value);
 });
 
 test("Pages 子路径通过站内资源渲染公式和 Mermaid", async ({ page, context }) => {
