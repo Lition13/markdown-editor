@@ -276,7 +276,7 @@ test("围栏联想代码语言，回车继续输入，语言仅在编辑时可�
   await expect(language).toHaveValue("C++");
   const expected = "```cpp\nint main() {}\n// 注释\n```";
   expect(await saved(page)).toBe(expected);
-  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await page.getByRole("button", { name: "下载 .md", exact: true }).focus();
   await expect(language).toHaveCount(0);
   const rendered = page.locator(".notes-live-document pre code");
   await expect(rendered).toHaveClass(/language-cpp/);
@@ -1297,7 +1297,7 @@ test("描述快捷键只在编辑焦点内生效", async ({ page }) => {
   await ready(page);
   const original = "保留原文";
   await notes(page).fill(original);
-  await page.getByRole("button", { name: "编辑", exact: true }).focus();
+  await page.getByRole("button", { name: "下载 .md", exact: true }).focus();
   await page.keyboard.press("Control+Shift+KeyQ");
   await page.keyboard.press("Alt+Shift+Digit5");
   await page.keyboard.press("Alt+KeyT");
@@ -1741,11 +1741,12 @@ test("类图保留泛型与注释，支持重名命名空间及提前定义的�
 
 test("时序图保留分组、创建与销毁参与者和分支说明", async ({ page }) => {
   test.setTimeout(90000);
+  // Keep the complete multi-diagram fixture in the live editor viewport.
+  await page.setViewportSize({ width: 1440, height: 4800 });
   await ready(page);
   const description = [sequenceSamples.boxes, sequenceSamples.lifecycle, sequenceSamples.blocks, sequenceSamples.numbering, sequenceSamples.denseBoxes, sequenceSamples.literal].map((source) => "```mermaid\n" + source + "\n```").join("\n\n");
   await notes(page).fill(description); await showRenderedDescription(page);
-  await page.getByRole("button", { name: "预览", exact: true }).click();
-  const drawings = page.locator(".workspace-body:not([hidden]) .mermaid-canvas > svg");
+  const drawings = rendered(page).locator(".mermaid-canvas > svg");
   for (const theme of ["light", "dark"]) {
     await setTheme(page, theme);
     await expect(drawings).toHaveCount(6, { timeout: 60000 });
@@ -1761,11 +1762,12 @@ test("时序图保留分组、创建与销毁参与者和分支说明", async ({
 });
 
 test("实体关系图保留字段说明、主外键与同名分组里的实体", async ({ page }) => {
-  test.setTimeout(90000); await ready(page);
+  test.setTimeout(90000);
+  await page.setViewportSize({ width: 1440, height: 4800 });
+  await ready(page);
   const description = [erSamples.table, erSamples.keys, erSamples.collision, erSamples.generatedCollision, erSamples.nestedCollision, erSamples.groupCreatedLater, erSamples.literal].map((source) => "```mermaid\n" + source + "\n```").join("\n\n");
   await notes(page).fill(description); await showRenderedDescription(page);
-  await page.getByRole("button", { name: "预览", exact: true }).click();
-  const drawings = page.locator(".workspace-body:not([hidden]) .mermaid-canvas > svg");
+  const drawings = rendered(page).locator(".mermaid-canvas > svg");
   for (const theme of ["light", "dark"]) {
     await setTheme(page, theme);
     await expect(drawings).toHaveCount(7, { timeout: 60000 });

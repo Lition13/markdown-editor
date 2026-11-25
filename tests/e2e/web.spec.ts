@@ -19,6 +19,8 @@ test("打开 Markdown、编辑、刷新恢复、下载并重新打开", async ({
   const status = page.locator(".save-status");
   await page.goto("./");
   await expect(status).toHaveText("示例文档");
+  await expect(editor).toBeVisible();
+  await expect(page.getByRole("group", { name: "文档视图" })).toHaveCount(0);
   await page.getByLabel("选择 Markdown 文件").setInputFiles({
     name: "验收.markdown", mimeType: "text/markdown", buffer: Buffer.from(source),
   });
@@ -41,9 +43,9 @@ test("打开 Markdown、编辑、刷新恢复、下载并重新打开", async ({
     name: file.suggestedFilename(), mimeType: "text/markdown", buffer: Buffer.from(content),
   });
   await expect(page.getByText("验收.md", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "预览", exact: true }).click();
-  await expect(page.getByRole("table")).toContainText("已编辑");
-  await expect(page.getByRole("img", { name: "像素样例" })).toBeVisible();
+  const document = page.locator(".notes-live-document");
+  await expect(document.getByRole("table")).toContainText("已编辑");
+  await expect(document.getByRole("img", { name: "像素样例" })).toBeVisible();
 });
 
 test("Pages 子路径通过站内资源渲染公式和 Mermaid", async ({ page, context }) => {
@@ -64,11 +66,11 @@ test("Pages 子路径通过站内资源渲染公式和 Mermaid", async ({ page, 
     response.url().startsWith(origin + "markdown-editor/") && response.request().resourceType() === "font" && response.ok(),
   );
   await page.goto("./");
-  await page.getByRole("button", { name: "预览", exact: true }).click();
-  await expect(page.getByRole("table")).toBeVisible();
-  await expect(page.locator(".workspace-body:not([hidden]) .katex").first()).toBeVisible();
+  const document = page.locator(".notes-live-document");
+  await expect(document.getByRole("table")).toBeVisible();
+  await expect(document.locator(".katex").first()).toBeVisible();
   await localFont;
-  await expect(page.locator(".workspace-body:not([hidden]) .mermaid-canvas svg")).toBeVisible({ timeout: 30_000 });
+  await expect(document.locator(".mermaid-canvas svg")).toBeVisible({ timeout: 30_000 });
   expect(external).toEqual([]);
   expect(errors).toEqual([]);
 });

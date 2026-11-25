@@ -1,5 +1,5 @@
-import { MarkdownEditor, MarkdownPreview, type MarkdownTheme } from "@lition13/markdown-editor";
-import { Download, Eye, FileText, FolderOpen, Github, Moon, PencilLine, Sun } from "lucide-react";
+import { MarkdownEditor, type MarkdownTheme } from "@lition13/markdown-editor";
+import { Download, FileText, FolderOpen, Github, Moon, Sun } from "lucide-react";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@lition13/markdown-editor/style.css";
@@ -37,7 +37,6 @@ function App() {
   const [documentKey, setDocumentKey] = useState(0);
   const [ready, setReady] = useState(false);
   const [opening, setOpening] = useState(false);
-  const [view, setView] = useState<"editor" | "preview">("editor");
   const [theme, setTheme] = useState(readTheme);
   const [status, setStatus] = useState("正在读取草稿");
   const [error, setError] = useState("");
@@ -81,7 +80,6 @@ function App() {
       const value = await file.text();
       updateDraft({ name: file.name, value });
       setDocumentKey(key => key + 1);
-      setView("editor");
     } catch {
       setError("文件读取失败，请重新选择。");
     } finally {
@@ -136,27 +134,21 @@ function App() {
       <main className="workspace">
         <div className="workspace-header">
           <div className="document-name"><FileText size={17} aria-hidden="true" /><span>{draft.name}</span></div>
-          <div className="view-options" role="group" aria-label="文档视图">
-            <button type="button" aria-pressed={view === "editor"} onClick={() => setView("editor")}><PencilLine size={15} />编辑</button>
-            <button type="button" aria-pressed={view === "preview"} onClick={() => setView("preview")}><Eye size={16} />预览</button>
-          </div>
         </div>
         {error && <p className="file-error" role="alert">{error}</p>}
         {ready ? (
-          <>
-            <div className="workspace-body" hidden={view !== "editor"}>
-              <MarkdownEditor key={documentKey} theme={theme} value={draft.value} onChange={value => updateDraft({ ...draft, value })} />
-            </div>
-            {view === "preview" && (
-              <div className="workspace-body">
-                <MarkdownPreview theme={theme} value={draft.value} />
-              </div>
-            )}
-          </>
+          <div className="workspace-body">
+            <MarkdownEditor
+              key={documentKey}
+              theme={theme}
+              value={draft.value}
+              onChange={value => updateDraft({ ...draft, value })}
+            />
+          </div>
         ) : <div className="workspace-body waiting">正在读取草稿…</div>}
         <footer className="workspace-footer">
           <span role="status" className="save-status">{status}</span>
-          {view === "editor" && <span className="keyboard-hint"><kbd>/</kbd> 打开编辑工具</span>}
+          <span className="keyboard-hint"><kbd>/</kbd> 打开编辑工具</span>
         </footer>
       </main>
     </>
