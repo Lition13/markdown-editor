@@ -20,6 +20,15 @@ async function dragInLibrary(page: Page, source: Locator, target: Locator) {
   await page.mouse.up();
 }
 
+async function createLibraryFolder(files: Locator, name: string) {
+  await files.getByRole("button", { name: "新建文件夹", exact: true }).click();
+  await files.getByLabel("文件夹名称", { exact: true }).fill(name);
+  await files.getByRole("button", { name: "创建", exact: true }).click();
+  const folder = files.getByRole("button", { name, exact: true });
+  await expect(folder).toHaveAttribute("aria-expanded", "true");
+  return folder;
+}
+
 test("导入 Markdown、编辑、刷新恢复、导出并重新导入", async ({ page }) => {
   const source = [
     "# 验收文档",
@@ -357,7 +366,7 @@ test("大纲识别实际标题，从正文和源码跳到长文档中的章节",
   await expect.poll(() => editor.evaluate(field => (field as HTMLTextAreaElement).selectionStart)).toBe(0);
 });
 
-test("升级旧版文件库后可创建子文件夹、导入和移动，删除文件夹保留原文", async ({ page }) => {
+test("目录树沿用旧版文件库，创建子文件夹、移动同名文件和删除后保留原文", async ({ page }) => {
   const legacy = { id: "old-file", name: "记录.md", value: "旧版文件内容" };
   await page.route("**/markdown-editor/seed-v2", route => route.fulfill({ contentType: "text/html", body: "<!doctype html>" }));
   await page.goto("./seed-v2");
@@ -377,28 +386,27 @@ test("升级旧版文件库后可创建子文件夹、导入和移动，删除�
   const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
   await expect(editor).toHaveText(legacy.value);
 
-  for (const name of ["项目", "会议"]) {
-    await files.getByRole("button", { name: "新建文件夹", exact: true }).click();
-    await files.getByLabel("文件夹名称", { exact: true }).fill(name);
-    await files.getByRole("button", { name: "创建", exact: true }).click();
-    await expect(files.getByRole("navigation", { name: "文件夹路径" }).getByText(name, { exact: true })).toBeVisible();
-  }
+  const project = await createLibraryFolder(files, "项目");
+  const meeting = await createLibraryFolder(files, "会议");
+  const documents = meeting.locator("xpath=../..");
+  await expect(project.locator("xpath=../..").getByRole("button", { name: "会议", exact: true })).toBeVisible();
   await files.getByLabel("选择 Markdown 文件").setInputFiles({
     name: "记录.md", mimeType: "text/markdown", buffer: Buffer.from("刚导入的不同正文"),
   });
   await expect(editor).toHaveText("刚导入的不同正文");
+  await project.click();
+  await expect(meeting).toHaveCount(0);
   await files.getByRole("button", { name: "文件库", exact: true }).click();
   await expect(files.getByRole("button", { name: "移动 记录.md", exact: true })).toHaveCount(0);
   await dragInLibrary(page, files.getByRole("button", { name: "记录.md", exact: true }),
     files.getByRole("region", { name: "放到文件夹" }).getByLabel("放到 项目 / 会议", { exact: true }));
-  await expect(files.getByRole("button", { name: "记录.md", exact: true })).toHaveCount(0);
-  await files.getByRole("button", { name: "项目", exact: true }).click();
-  await files.getByRole("button", { name: "会议", exact: true }).click();
-  await files.getByRole("button", { name: "记录 (2).md", exact: true }).click();
+  await expect(project).toHaveAttribute("aria-expanded", "true");
+  await expect(meeting).toHaveAttribute("aria-expanded", "true");
+  await documents.getByRole("button", { name: "记录 (2).md", exact: true }).click();
   await expect(editor).toHaveText(legacy.value);
 
   await page.reload();
-  await expect(files.getByRole("navigation", { name: "文件夹路径" }).getByText("会议", { exact: true })).toBeVisible();
+  await expect(documents.getByRole("button", { name: "记录 (2).md", exact: true })).toBeVisible();
   await expect(editor).toHaveText(legacy.value);
   await files.getByRole("button", { name: "文件库", exact: true }).click();
   await files.getByRole("button", { name: "删除文件夹 项目", exact: true }).click();
@@ -412,23 +420,17 @@ test("升级旧版文件库后可创建子文件夹、导入和移动，删除�
   await expect(editor).toHaveText(legacy.value);
 });
 
-test("文件夹可以拖入其他文件夹或拖回上一级，原有子目录和文档随行", async ({ page }) => {
+test("目录树可拖入折叠文件夹或拖回根目录，原有子目录和文档随行", async ({ page }) => {
   await page.goto("./");
   const files = await fileManager(page);
-  const create = async (name: string) => {
-    await files.getByRole("button", { name: "新建文件夹", exact: true }).click();
-    await files.getByLabel("文件夹名称", { exact: true }).fill(name);
-    await files.getByRole("button", { name: "创建", exact: true }).click();
-    await expect(files.getByRole("navigation", { name: "文件夹路径" }).getByText(name, { exact: true })).toBeVisible();
-  };
   const root = files.getByRole("button", { name: "文件库", exact: true });
-  const parent = files.getByRole("button", { name: "归档", exact: true });
-  const folder = files.getByRole("button", { name: "项目", exact: true });
-  const child = files.getByRole("button", { name: "周会", exact: true });
-  await create("归档");
+  const parent = await createLibraryFolder(files, "归档");
+  const parentBranch = parent.locator("xpath=../..");
+  await parent.click();
+  await expect(parent).toHaveAttribute("aria-expanded", "false");
   await root.click();
-  await create("项目");
-  await create("周会");
+  const folder = await createLibraryFolder(files, "项目");
+  const child = await createLibraryFolder(files, "周会");
   await files.getByLabel("选择 Markdown 文件").setInputFiles({
     name: "纪要.md", mimeType: "text/markdown", buffer: Buffer.from("子目录里的原文"),
   });
@@ -441,31 +443,74 @@ test("文件夹可以拖入其他文件夹或拖回上一级，原有子目录�
   await expect(targets).toBeVisible();
   await expect(targets.getByLabel("放到 项目 / 周会", { exact: true })).toHaveCount(0);
   await expect(folder.locator("..")).not.toHaveAttribute("data-drop-active", "true");
+  const childRow = child.locator("..");
+  const childBox = (await childRow.boundingBox())!;
+  await page.mouse.move(childBox.x + childBox.width / 2, childBox.y + childBox.height / 2, { steps: 8 });
+  await expect(childRow).not.toHaveAttribute("data-drop-active", "true");
   await page.mouse.up();
   await expect(targets).toBeHidden();
-  await expect(folder).toBeVisible();
+  await expect(folder.locator("xpath=../..").getByRole("button", { name: "周会", exact: true })).toBeVisible();
 
   await dragInLibrary(page, folder, parent.locator(".."));
-  await expect(folder).toHaveCount(0);
-  await parent.click();
-  await expect(folder).toBeVisible();
+  await expect(parent).toHaveAttribute("aria-expanded", "true");
+  await expect(parentBranch.getByRole("button", { name: "项目", exact: true })).toBeVisible();
+  await expect(child).toBeVisible();
   await dragInLibrary(page, folder, root);
-  await expect(folder).toHaveCount(0);
-  await root.click();
+  await expect(parentBranch.getByRole("button", { name: "项目", exact: true })).toHaveCount(0);
+  await expect(folder).toBeVisible();
 
   await folder.press("Shift+Space");
   const chooseParent = targets.getByRole("button", { name: "放到 归档", exact: true });
   await expect(chooseParent).toBeFocused();
   await chooseParent.press("Enter");
-  await expect(folder).toHaveCount(0);
+  await expect(parentBranch.getByRole("button", { name: "项目", exact: true })).toBeVisible();
   await page.reload();
-  const path = files.getByRole("navigation", { name: "文件夹路径" });
-  await expect(path).toContainText("归档");
-  await expect(path).toContainText("项目");
-  await expect(path).toContainText("周会");
-  await path.getByRole("button", { name: "项目", exact: true }).click();
-  await expect(child).toBeVisible();
+  await expect(parentBranch.getByRole("button", { name: "纪要.md", exact: true })).toBeVisible();
   await expect(editor).toHaveText("子目录里的原文");
+});
+
+test("目录树同时展开多个分支，折叠保留当前文档，搜索打开文件后展开其目录", async ({ page }) => {
+  await page.goto("./");
+  const files = await fileManager(page);
+  const root = files.getByRole("button", { name: "文件库", exact: true });
+  const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
+  const notes = files.getByLabel("选择 Markdown 文件");
+  const project = await createLibraryFolder(files, "项目");
+  const meeting = await createLibraryFolder(files, "周会");
+  await notes.setInputFiles({ name: "纪要.md", mimeType: "text/markdown", buffer: Buffer.from("会议正文") });
+  await expect(editor).toHaveText("会议正文");
+
+  await root.click();
+  await expect(meeting).toBeVisible();
+  const archive = await createLibraryFolder(files, "归档");
+  await notes.setInputFiles({ name: "存档.md", mimeType: "text/markdown", buffer: Buffer.from("归档正文") });
+  await expect(editor).toHaveText("归档正文");
+
+  const document = files.getByRole("button", { name: "纪要.md", exact: true });
+  const archived = files.getByRole("button", { name: "存档.md", exact: true });
+  await document.click();
+  await expect(editor).toHaveText("会议正文");
+  await project.press("Enter");
+  await expect(project).toHaveAttribute("aria-expanded", "false");
+  await expect(document).toHaveCount(0);
+  await expect(archived).toBeVisible();
+  await expect(editor).toHaveText("会议正文");
+
+  await page.reload();
+  await expect(project).toHaveAttribute("aria-expanded", "false");
+  await expect(archive).toHaveAttribute("aria-expanded", "true");
+  await expect(archived).toBeVisible();
+  await expect(editor).toHaveText("会议正文");
+
+  const search = files.getByRole("searchbox", { name: "搜索文件名" });
+  await search.fill("纪要");
+  const result = files.getByRole("list", { name: "文件搜索结果" }).getByRole("button", { name: /纪要\.md.*项目 \/ 周会/ });
+  await result.click();
+  await expect(search).toHaveValue("");
+  await expect(project).toHaveAttribute("aria-expanded", "true");
+  await expect(meeting).toHaveAttribute("aria-expanded", "true");
+  await expect(document).toHaveAttribute("aria-current", "true");
+  await expect(archived).toBeVisible();
 });
 
 test("Pages 子路径通过站内资源渲染公式和 Mermaid", async ({ page, context }) => {

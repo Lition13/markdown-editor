@@ -316,6 +316,31 @@ dialog.side-panel::backdrop { background: #101a3278; }
 .button.danger { color: var(--error); }
 .button.danger:hover { border-color: var(--error); }
 .library-error { margin: 2px 0 0; color: var(--error); font-size: .875rem; }
+.library-location { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.library-root {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 31px;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: .8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.library-root:hover, .library-root[aria-current] { background: var(--panel); color: var(--accent); }
+.library-placement {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: .75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .library-files {
   flex: 1;
   min-height: 0;
@@ -325,17 +350,23 @@ dialog.side-panel::backdrop { background: #101a3278; }
   overscroll-behavior: contain;
   list-style: none;
 }
-.library-files li {
+.library-branch { margin: 0; padding: 0; list-style: none; }
+.library-branch[data-indent="true"] {
+  margin-inline-start: 11px;
+  padding-inline-start: 3px;
+  border-inline-start: 1px solid var(--edge);
+}
+.library-branch-empty { padding: 5px 9px 8px; color: var(--muted); font-size: .8rem; }
+.library-row {
   display: flex;
   align-items: center;
-  gap: 0;
   min-height: 39px;
-  margin-bottom: 3px;
-  padding-right: 5px;
+  margin-bottom: 2px;
+  padding-inline-end: 4px;
   border-radius: 8px;
 }
-.library-files li:hover { background: var(--panel); }
-.library-files li.is-current {
+.library-row:hover { background: var(--panel); }
+.library-row.is-current {
   background: var(--soft-accent);
   box-shadow: inset 2px 0 var(--accent);
 }
@@ -343,7 +374,7 @@ dialog.side-panel::backdrop { background: #101a3278; }
   display: flex;
   flex: 1;
   align-items: center;
-  gap: 9px;
+  gap: 6px;
   min-width: 0;
   min-height: 39px;
   padding: 3px 3px 3px 7px;
@@ -356,7 +387,12 @@ dialog.side-panel::backdrop { background: #101a3278; }
   cursor: pointer;
   user-select: none;
 }
+.file-open:focus-visible, .library-root:focus-visible { outline-offset: -2px; }
 .file-open svg { flex: none; color: var(--muted); }
+.folder-chevron { flex: 0 0 12px; }
+.file-open[aria-expanded="true"] .folder-chevron { transform: rotate(90deg); }
+.folder-row .file-kind-icon, .is-current .file-kind-icon, .file-open[aria-current="location"] { color: var(--accent); }
+.file-open[aria-current="location"] .file-list-name, .is-current .file-list-name { font-weight: 620; }
 .file-drag-handle {
   display: inline-grid;
   place-items: center;
@@ -369,9 +405,6 @@ dialog.side-panel::backdrop { background: #101a3278; }
 }
 .file-open[data-dragging="true"] { opacity: .55; cursor: grabbing; }
 .file-open[data-dragging="true"] .file-drag-handle { cursor: grabbing; }
-.folder-row .file-open svg { color: var(--accent); }
-.is-current .file-open svg { color: var(--accent); }
-.is-current .file-list-name { font-weight: 620; }
 .file-list-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-list-name small {
   display: block;
@@ -434,28 +467,6 @@ dialog.side-panel::backdrop { background: #101a3278; }
   color: var(--muted);
   font-size: .8125rem;
 }
-.folder-path {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 4px;
-  min-width: 0;
-  max-height: 64px;
-  overflow: auto;
-  color: var(--muted);
-  font-size: .75rem;
-}
-.folder-path > span { display: inline-flex; align-items: center; gap: 3px; min-width: 0; max-width: 100%; }
-.folder-path > span svg { flex: none; }
-.folder-path button {
-  padding: 3px;
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  cursor: pointer;
-}
-.folder-path > span > :not(svg) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.folder-path [aria-current] { font-weight: 620; color: var(--text); }
 .file-manager [data-drop-active="true"] {
   border-radius: 6px;
   outline: 2px solid var(--accent);
