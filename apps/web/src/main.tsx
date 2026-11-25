@@ -91,7 +91,6 @@ function Toolbar({ children }: { children: ReactNode }) {
 
   return (
     <header className="app-header" data-visible={visible} data-pinned={held}
-      onPointerEnter={revealFromPointer}
       onPointerMove={revealFromPointer}
       onPointerLeave={() => setHovered(false)}
       onPointerDownCapture={() => setKeyboard(false)}

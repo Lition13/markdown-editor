@@ -293,6 +293,7 @@ test("工作台铺满窗口，顶栏悬浮，字词和行数实时更新并记�
   const toolbar = page.locator("#workbench-toolbar");
   const handle = page.getByRole("button", { name: "顶部工具栏" });
   const footer = page.locator("#workspace-status");
+  await page.mouse.move(550, 180);
   await expect(page.getByRole("complementary", { name: "文件管理" })).toBeVisible();
   await expect(page.getByRole("complementary", { name: "文件管理" }).getByText("文件保存在此浏览器")).toHaveCount(0);
   await expect(page.getByRole("complementary", { name: "文档大纲" })).toBeVisible();
@@ -301,7 +302,6 @@ test("工作台铺满窗口，顶栏悬浮，字词和行数实时更新并记�
   await expect.poll(() => page.locator(".workbench").evaluate(shell => {
     return Math.round(shell.getBoundingClientRect().width) === document.documentElement.clientWidth;
   })).toBe(true);
-  await page.mouse.move(550, 180);
   await handle.hover();
   await expect(toolbar).toBeVisible();
   await page.mouse.move(550, 180);
@@ -622,6 +622,8 @@ test("文件栏、大纲和顶栏在刷新与重新打开后恢复显隐", async
 
   const reopened = await context.newPage();
   await reopened.goto("./");
+  await reopened.mouse.move(600, 200);
+  await expect(reopened.getByRole("button", { name: "顶部工具栏", exact: true })).toHaveAttribute("aria-pressed", "false");
   await expect(reopened.locator("#workbench-toolbar")).toBeHidden();
   await expect(reopened.locator("#file-manager")).toBeVisible();
   await expect(reopened.locator("#document-outline")).toBeHidden();
