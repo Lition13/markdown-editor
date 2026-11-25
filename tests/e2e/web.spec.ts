@@ -497,12 +497,17 @@ test("在线版切换中英文后保留文档、撤销历史和浏览器偏好",
   const root = page.locator("html");
   await expect(root).toHaveAttribute("lang", "zh-CN");
   const files = await fileManager(page);
+  await expect(page.getByRole("heading", { name: "开始写作", exact: true })).toBeVisible();
+  const toolbar = await revealToolbar(page);
+  const editSource = toolbar.getByRole("button", { name: "源码", exact: true });
+  await editSource.click();
   const original = "# 保留标题\n\n中文和 English 正文。";
   await files.getByLabel("选择 Markdown 文件").setInputFiles({
     name: "验收笔记.md", mimeType: "text/markdown", buffer: Buffer.from(original),
   });
-  const toolbar = await revealToolbar(page);
-  await toolbar.getByRole("button", { name: "源码", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "保留标题", exact: true })).toBeVisible();
+  await expect(editSource).toHaveAttribute("aria-pressed", "false");
+  await editSource.click();
   const draft = original + "\n\n临时输入";
   await page.getByRole("textbox", { name: "Markdown 正文", exact: true }).fill(draft);
   await revealToolbar(page);

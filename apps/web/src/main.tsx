@@ -143,15 +143,17 @@ function Workspace({
 }) {
   const locale = useWebLocale();
   const t = webTranslator(locale);
-  const [mode, setMode] = useState<MarkdownMode>("live");
-  const [chosenHeading, setChosenHeading] = useState<number>();
   const editor = useRef<MarkdownEditorHandle>(null);
   const footer = useRef<HTMLElement>(null);
   const { current, ready, status, change } = library;
+  const documentId = current?.id;
+  const [view, setView] = useState<{ documentId: string | undefined; mode: MarkdownMode; headingOffset?: number }>({ documentId, mode: "live" });
+  if (view.documentId !== documentId) setView({ documentId, mode: "live" });
+  const { mode, headingOffset } = view;
   const value = current?.value ?? "";
   const inspect = outlineOpen || statusOpen;
   const information = useMemo(() => inspect ? inspectMarkdown(value, locale) : null, [inspect, value, locale]);
-  useLayoutEffect(() => { window.scrollTo(0, 0); }, []);
+  useLayoutEffect(() => { window.scrollTo(0, 0); }, [documentId]);
   useLayoutEffect(() => {
     const root = document.documentElement;
     const bar = statusOpen ? footer.current : null;
@@ -169,8 +171,12 @@ function Workspace({
     };
   }, [statusOpen]);
 
+  function setMode(mode: MarkdownMode) {
+    setView(previous => ({ ...previous, mode }));
+  }
+
   function jump(heading: MarkdownOutlineItem) {
-    setChosenHeading(heading.offset);
+    setView(previous => ({ ...previous, headingOffset: heading.offset }));
     if (compact) {
       closeOutline();
       requestAnimationFrame(() => editor.current?.focusAt(heading.offset));
@@ -181,7 +187,7 @@ function Workspace({
 
   const headings = information?.headings ?? [];
   const shallowest = headings.reduce((level, heading) => Math.min(level, heading.depth), 6);
-  const activeHeading = headings.find(heading => heading.offset === chosenHeading) ?? headings[0];
+  const activeHeading = headings.find(heading => heading.offset === headingOffset) ?? headings[0];
 
   return (
     <>
@@ -244,6 +250,7 @@ function Workspace({
         {current ? (
           <div className="workspace-body">
             <MarkdownEditor
+              key={current.id}
               ref={editor}
               theme={theme}
               locale={locale}
@@ -401,7 +408,7 @@ function App() {
 
   return <WebLocale.Provider value={locale}>
     <div className="workbench" data-files={!compact && filesOpen} data-outline={!compact && outlineOpen}>
-      <Workspace key={library.current?.id ?? "workspace"} library={library} theme={theme}
+      <Workspace library={library} theme={theme}
         customThemeActive={!!customTheme} showThemeSettings={() => setThemeSettingsOpen(true)}
         compact={compact} filesOpen={filesOpen} outlineOpen={outlineOpen} statusOpen={statusOpen} showFiles={showFiles}
         shortcuts={shortcuts} showShortcuts={() => setShortcutsOpen(true)}
