@@ -35,6 +35,7 @@ const nameOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: "ba
 let connection: Promise<IDBDatabase> | undefined;
 
 export const exampleFile: MarkdownFile = { id: "example", revision: 0, ...example };
+const previousExample = example.value.replace("| 插入表格 | Ctrl+Shift+Enter |", "| 插入表格 | Ctrl+T |");
 const nameKey = (name: string) => name.normalize("NFC").toLowerCase();
 
 export function fileEntry({ id, name, revision, folderId }: FileEntry): FileEntry {
@@ -116,6 +117,24 @@ export function movedFile(files: FileEntry[], id: string, folderId: string | nul
   if (!file) throw new Error("这个文件已被移除。");
   if ((file.folderId ?? null) === folderId) return file;
   return { ...file, folderId, name: reserveFileName(file.name, namesInFolder(files, folderId)) };
+}
+
+export function containsFolder(folders: Map<string, FolderEntry>, ancestorId: string, folderId: string | null) {
+  for (let id = folderId; id !== null; id = folders.get(id)?.parentId ?? null) {
+    if (id === ancestorId) return true;
+  }
+  return false;
+}
+
+export function movedFolder(folders: FolderEntry[], id: string, parentId: string | null): FolderEntry {
+  const entries = new Map(folders.map(folder => [folder.id, folder]));
+  const folder = entries.get(id);
+  if (!folder) throw new Error("这个文件夹已被移除。");
+  if (folder.parentId === parentId) return folder;
+  if (parentId !== null && !entries.has(parentId)) throw new Error("目标文件夹已被移除。");
+  if (containsFolder(entries, id, parentId)) throw new Error("不能把文件夹移到自身或子文件夹。");
+  const names = new Set(folders.filter(other => other.parentId === parentId).map(other => nameKey(other.name)));
+  return { ...folder, parentId, name: reserveName(folder.name, "", names) };
 }
 
 export function folderRemoval(folders: FolderEntry[], files: FileEntry[], id: string) {
@@ -222,7 +241,9 @@ async function transaction<T>(mode: IDBTransactionMode, action: (tx: IDBTransact
 async function withText(tx: IDBTransaction, entry: FileEntry): Promise<MarkdownFile> {
   const value = await read<string | undefined>(tx.objectStore(textStore).get(entry.id));
   if (value === undefined) throw new Error("无法读取此文件的内容。");
-  return { ...entry, value };
+  const unchangedExample = entry.id === exampleFile.id && entry.name === exampleFile.name
+    && entry.revision === 0 && value === previousExample;
+  return { ...entry, value: unchangedExample ? example.value : value };
 }
 
 export function readLibrary(): Promise<FileLibrary> {
@@ -322,6 +343,15 @@ export function moveFile(id: string, folderId: string | null): Promise<FileEntry
     const file = movedFile(entries, id, folderId);
     store.put(file);
     return file;
+  });
+}
+
+export function moveFolder(id: string, parentId: string | null): Promise<FolderEntry> {
+  return transaction("readwrite", async tx => {
+    const store = tx.objectStore(foldersStore);
+    const folder = movedFolder(await read<FolderEntry[]>(store.getAll()), id, parentId);
+    store.put(folder);
+    return folder;
   });
 }
 

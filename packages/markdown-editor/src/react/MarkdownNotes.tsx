@@ -41,7 +41,11 @@ import type { InlineMarkdownHandle, MarkdownKeystroke } from "./InlineMarkdownEd
 import { emptyMarkdownMarkerRange, indentListItems } from "../core/markdownList";
 import { suppressBackspaceRepeat } from "../core/keyboard";
 import { pairedSymbolAfterInput } from "../core/markdownPairs";
-import { formatMarkdownInline, isInlineMarkdownFormat, markdownShortcut, markdownShortcutLabels as keys } from "../core/markdownShortcuts";
+import {
+  editorShortcutPrefix, formatMarkdownInline, isInlineMarkdownFormat, markdownHeadingShortcut, markdownHeadingShortcutLabel,
+  markdownShortcut, markdownShortcutLabels as keys,
+} from "../core/markdownShortcuts";
+import { useMarkdownKeySequence } from "./useMarkdownKeySequence";
 import { completedSymbolPair } from "./markdownPairComposition";
 import {
   changeMarkdownHeading,
@@ -273,6 +277,7 @@ function Editor({
     [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [focusOnLoad, setFocusOnLoad] = useState(false);
+  const keySequence = useMarkdownKeySequence();
   useEffect(() => {
     active.current = true;
     return () => {
@@ -476,9 +481,27 @@ function Editor({
     }
   };
   const handleKey = (event: MarkdownKeystroke, composing: boolean) => {
-    if (composing || event.defaultPrevented) return false;
+    if (composing) {
+      keySequence.reset();
+      return false;
+    }
+    if (event.defaultPrevented) return false;
+    const prefixed = keySequence.read(event);
+    if (prefixed === null) return true;
     const mod = event.ctrlKey || event.metaKey;
-    const shortcut = markdownShortcut(event);
+    const heading = markdownHeadingShortcut(event, prefixed);
+    if (heading !== undefined) {
+      if (mode === "live") {
+        if (!inline.current?.setHeading(heading)) return false;
+      } else {
+        if (typeof heading !== "number" || heading === 0 || isInMarkdownFence(latest.current, range().start)) return false;
+        format(heading);
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
+    }
+    const shortcut = markdownShortcut(event, prefixed);
     if (shortcut) {
       if (shortcut === "expand" && !onExpand) return false;
       event.preventDefault();
@@ -569,9 +592,9 @@ function Editor({
     { id: "search", search: "搜索描述工具" },
     ...["一", "二", "三", "四", "五", "六"].map((name, index) => {
       const depth = index + 1;
-      return option(`h${depth}`, `${name}级标题`, <Heading size={15} />, () => format(depth), `h${depth} 标题 heading`, mode === "live" ? `Ctrl ${depth}` : undefined);
+      return option(`h${depth}`, `${name}级标题`, <Heading size={15} />, () => format(depth), `h${depth} 标题 heading`, markdownHeadingShortcutLabel(depth));
     }),
-    ...(mode === "live" ? [option("paragraph", "普通段落", <Pilcrow size={15} />, () => format(0), "取消标题 paragraph", "Ctrl 0")] : []),
+    ...(mode === "live" ? [option("paragraph", "普通段落", <Pilcrow size={15} />, () => format(0), "取消标题 paragraph", markdownHeadingShortcutLabel(0))] : []),
     option("bold", "描述加粗", <Bold size={15} />, () => format("bold"), "bold 粗体", keys.bold),
     option("italic", "描述斜体", <Italic size={15} />, () => format("italic"), "italic", keys.italic),
     option("strike", "描述删除线", <Strikethrough size={15} />, () => format("strike"), "strike", keys.strike),
@@ -674,7 +697,7 @@ function Editor({
         onChange={e => { void loadImages(Array.from(e.target.files ?? [])); }}
       />
       {error && !panel && <p className="notes-edit-error" role="alert">{error}</p>}
-      <div className="notes-editor-body">
+      <div className="notes-editor-body" onPointerDownCapture={keySequence.reset} onBlurCapture={keySequence.reset}>
         {mode === "live" ? (
           <div className="notes-live-document">
             <Suspense fallback={<div className="markdown-loading">正在载入描述…</div>}>
@@ -689,6 +712,7 @@ function Editor({
                   selection.current = after;
                 }}
                 onMove={onMove}
+                hasKeySequence={keySequence.isWaiting}
                 onKey={handleKey}
                 onSlash={openTools}
                 onImages={files => { void loadImages(files); }}
@@ -697,6 +721,7 @@ function Editor({
           </div>
         ) : textarea}
       </div>
+      {keySequence.waiting && <div className="notes-key-sequence" role="status">已输入 {editorShortcutPrefix}，等待下一个键</div>}
       {tools && (
         <ActionMenu
           label="描述工具"
@@ -729,7 +754,7 @@ function Editor({
             content: panel === "table" ? <MarkdownTableSize initial={{ rows: 3, columns: 2 }} label="插入表格" onApply={insertTable} /> : panel === "help" ? (
               <div className="notes-help-panel">
                 <pre>{"# 一级标题 · ## 二级标题\n**加粗**  *斜体*  ~~删除线~~\n`行内代码`\n- 无序列表\n1. 有序列表\n- [ ] 未完成  - [x] 已完成\n> 引用\n[文字](https://example.com)\n![图片说明](图片地址)\n| 标题 | 标题 |\n| --- | --- |\n| 内容 | 内容 |\n$行内公式$ · $$块级公式$$\n脚注[^1]\n[^1]: 脚注内容"}</pre>
-                <p>输入 / 搜索工具，连续输入 // 插入 /。Ctrl+B 加粗、Ctrl+I 斜体、Ctrl+K 插入链接、Alt+T 切换待办列表。列表内回车续写，空列表项回车退出。支持粘贴或拖入本地图片。</p>
+                <p>输入 / 搜索工具和对应快捷键。带 → 的组合先按左边，再按右边。{keys.table} 插入表格。连续输入 // 插入 /。列表内回车续写，空列表项回车退出。支持粘贴或拖入本地图片。</p>
               </div>
             ) : (
               <form className="notes-insert-form" onSubmit={e => { e.preventDefault(); insertLink(); }}>

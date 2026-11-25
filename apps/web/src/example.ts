@@ -11,7 +11,7 @@ export const example = {
     "| 操作 | 快捷键 |",
     "| :--- | :--- |",
     "| 切换正文和源码 | Ctrl+/ |",
-    "| 插入表格 | Ctrl+T |",
+    "| 插入表格 | Ctrl+Shift+Enter |",
     "| 全屏编辑 | Alt+Enter |",
     "",
     "## 公式与图表",

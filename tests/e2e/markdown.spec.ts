@@ -6,6 +6,9 @@ import { sequenceSamples } from "../fixtures/sequence-fixtures.mjs";
 import { erSamples } from "../fixtures/er-fixtures.mjs";
 import { erLayoutIssues } from "../fixtures/er-layout-checks.mjs";
 import { fileManager, revealToolbar } from "./workbench";
+const pressShortcut = async (target: { press(key: string): Promise<void> }, shortcut: string) => {
+  for (const key of shortcut.split(" ")) await target.press(key);
+};
 const notes = (page: Page) =>
   page.getByRole("textbox", { name: "Markdown 正文", exact: true });
 const rendered = (page: Page) => page.locator(".notes-live-document");
@@ -452,17 +455,17 @@ test("标题输入、快捷键和开头退格保持文字和光标", async ({ pa
   await expect(live.locator(".cm-md-syntax")).toHaveText("##");
   await page.keyboard.insertText(" 调度计划");
   await expect(live.getByRole("heading", { level: 2, name: "调度计划" })).toBeVisible();
-  await page.keyboard.press("Control+=");
+  await pressShortcut(page.keyboard, "Control+Shift+Period Equal");
   await expect(live.getByRole("heading", { level: 1, name: "调度计划" })).toBeVisible();
-  await page.keyboard.press("Control+-");
-  await page.keyboard.press("Control+4");
-  await page.keyboard.press("Control+4");
+  await pressShortcut(page.keyboard, "Control+Shift+Period Minus");
+  await pressShortcut(page.keyboard, "Control+Shift+Period Digit4");
+  await pressShortcut(page.keyboard, "Control+Shift+Period Digit4");
   await expect(live.getByRole("heading", { level: 4, name: "调度计划" })).toBeVisible();
   await page.keyboard.press("Home");
   await page.keyboard.press("Backspace");
   await page.keyboard.insertText("本周");
   expect(await saved(page)).toBe("本周调度计划");
-  await page.keyboard.press("Control+2");
+  await pressShortcut(page.keyboard, "Control+Shift+Period Digit2");
   await command(page, "普通段落");
   expect(await saved(page)).toBe("本周调度计划");
 });
@@ -810,11 +813,11 @@ test("表格保持布局，Tab 换格并续行，保留对齐、格式和转义"
   expect(await saved(page)).toMatch(/\| 新增  \|   \|\n\n后文$/);
 });
 
-test("Ctrl+T 和键入表头可创建指定尺寸的表格并聚焦单元格", async ({ page }) => {
+test("Ctrl+Shift+Enter 和键入表头可创建指定尺寸的表格并聚焦单元格", async ({ page }) => {
   await ready(page);
   await notes(page).fill("");
   await command(page, "实时编辑描述");
-  await page.keyboard.press("Control+t");
+  await page.keyboard.press("Control+Shift+Enter");
   const picker = page.getByRole("dialog", { name: "插入表格", exact: true });
   await picker.getByRole("button", { name: "选择 2 行 3 列", exact: true }).click();
   await expect(picker.getByRole("spinbutton", { name: "行数（含表头）" })).toHaveValue("2");
@@ -851,9 +854,9 @@ test("表格行列菜单和快捷键可调整结构与对齐，缩小后可撤�
   await expect(cell(2, 2)).toBeFocused();
   await tool.getByRole("button", { name: "居中对齐", exact: true }).click();
   await expect(table.getByRole("columnheader").last()).toHaveCSS("text-align", "center");
-  await cell(2, 2).press("Alt+ArrowDown");
+  await pressShortcut(cell(2, 2), "Control+Shift+Period KeyD");
   await expect(cell(3, 2)).toHaveValue("1\\|2");
-  await cell(3, 2).press("Alt+ArrowLeft");
+  await pressShortcut(cell(3, 2), "Control+Shift+Period KeyL");
   await expect(cell(3, 1)).toHaveValue("1\\|2");
   await tool.getByRole("button", { name: "表格行列操作", exact: true }).click();
   await page.getByRole("menu", { name: "表格行列操作", exact: true }).getByRole("menuitem", { name: "右侧插入列", exact: true }).click();
@@ -1023,7 +1026,7 @@ test("选区工具栏、快捷键、撤销重做、列表续写与缩进", async
   await expect(notes(page)).toHaveValue("**重点**内容");
   await notes(page).press("Control+y");
   await expect(notes(page)).toHaveValue("***重点***内容");
-  await notes(page).press("Control+k");
+  await pressShortcut(notes(page), "Control+Shift+Period KeyK");
   await page
     .getByRole("textbox", { name: "Markdown 地址", exact: true })
     .fill("https://example.com/");
@@ -1150,7 +1153,7 @@ test("描述待办从工具菜单插入后立即显示，快捷键与撤销可�
   await expect(notes(page)).toBeFocused();
   await page.keyboard.press("Control+z");
   await expect(checkbox).toHaveCount(0);
-  await page.keyboard.press("Alt+KeyT");
+  await pressShortcut(page.keyboard, "Control+Shift+Period KeyT");
   await expect(checkbox).toBeVisible();
   await page.keyboard.insertText("复查安排");
   const entry = page.getByRole("checkbox", { name: "Markdown 待办：复查安排", exact: true });
@@ -1228,45 +1231,45 @@ test("描述编辑快捷键应用常用格式并在工具菜单标注", async ({
   const input = notes(page);
   const value = "正文";
   for (const [shortcut, expected] of [
-    ["Control+Shift+KeyQ", "> 正文"],
-    ["Control+Shift+BracketLeft", "1. 正文"],
-    ["Control+Shift+BracketRight", "- 正文"],
-    ["Alt+KeyT", "- [ ] 正文"],
-    ["Alt+Shift+Digit5", "~~正文~~"],
-    ["Control+Shift+Backquote", "`正文`"],
+    ["Control+Shift+Period KeyQ", "> 正文"],
+    ["Control+Shift+Digit7", "1. 正文"],
+    ["Control+Shift+Digit8", "- 正文"],
+    ["Control+Shift+Period KeyT", "- [ ] 正文"],
+    ["Control+Shift+Period KeyS", "~~正文~~"],
+    ["Control+Shift+Period Backquote", "`正文`"],
   ]) {
     await input.fill(value);
     await select(page, 0, value.length);
-    await input.press(shortcut);
+    await pressShortcut(input, shortcut);
     await expect(input).toHaveValue(expected);
   }
 
   await input.fill("- 父项\n- 子项");
   await select(page, 5, 5);
-  await input.press("Control+BracketLeft");
+  await pressShortcut(input, "Control+Shift+Period BracketLeft");
   await expect(input).toHaveValue("- 父项\n    - 子项");
-  await input.press("Control+BracketRight");
+  await pressShortcut(input, "Control+Shift+Period BracketRight");
   await expect(input).toHaveValue("- 父项\n- 子项");
 
   await input.fill("x^2");
   await select(page, 0, 3);
-  await input.press("Control+Shift+KeyM");
+  await pressShortcut(input, "Control+Shift+Period KeyM");
   await expect(input).toHaveValue("$$\nx^2\n$$\n");
   await input.press("Control+z");
   await expect(input).toHaveValue("x^2");
   await input.press("Control+Shift+z");
   await expect(input).toHaveValue("$$\nx^2\n$$\n");
 
-  await input.press("Control+Shift+KeyI");
+  await pressShortcut(input, "Control+Shift+Period KeyP");
   await expect(page.getByRole("dialog", { name: "插入描述图片" })).toBeVisible();
   await page.getByRole("button", { name: "关闭插入面板" }).click();
   await input.press("/");
   const menu = toolsMenu(page);
   for (const [query, label] of [
-    ["代码块", "Ctrl+Shift+K"],
-    ["待办", "Alt+T"],
+    ["代码块", "Ctrl+Shift+. → C"],
+    ["待办", "Ctrl+Shift+. → T"],
     ["全屏", "Alt+Enter"],
-    ["语法帮助", "Ctrl+Shift+/"],
+    ["语法帮助", "Ctrl+Shift+. → /"],
   ]) {
     await menu.getByRole("textbox", { name: "搜索描述工具" }).fill(query);
     await expect(menu.getByText(label, { exact: true })).toBeVisible();
@@ -1281,12 +1284,12 @@ test("实时正文和表格单元格使用适用的快捷键并能撤销", async
   await notes(page).fill(original);
   await select(page, 0, code.length);
   await command(page, "实时编辑描述");
-  await page.keyboard.press("Control+Shift+KeyK");
+  await pressShortcut(page.keyboard, "Control+Shift+Period KeyC");
   await expect(page.locator(".cm-md-code-line")).toHaveText(code);
   const withFence = "```text\n" + code + "\n```\n\n" + table;
   await expect.poll(() => saved(page)).toBe(withFence);
   await page.keyboard.press("Control+b");
-  await page.keyboard.press("Control+Shift+KeyK");
+  await pressShortcut(page.keyboard, "Control+Shift+Period KeyC");
   expect(await saved(page)).toBe(withFence);
   await page.keyboard.press("Control+z");
   await expect.poll(() => saved(page)).toBe(original);
@@ -1304,19 +1307,30 @@ test("实时正文和表格单元格使用适用的快捷键并能撤销", async
 test("描述快捷键只在编辑焦点内生效", async ({ page }) => {
   await ready(page);
   const original = "保留原文";
-  await notes(page).fill(original);
+  const input = notes(page);
+  await input.fill(original);
+  const waiting = page.getByText("等待下一个键", { exact: false });
+  await input.press("Control+Shift+Period");
+  await expect(waiting).toBeVisible();
+  await input.press("Escape");
+  await expect(waiting).toHaveCount(0);
+  await pressShortcut(input, "Control+Shift+Period KeyX");
+  await expect(input).toHaveValue(original + "x");
+  await input.fill(original);
+  await input.press("Control+Shift+Period");
   await page.getByRole("button", { name: "顶部工具栏", exact: true }).focus();
-  await page.keyboard.press("Control+Shift+KeyQ");
-  await page.keyboard.press("Alt+Shift+Digit5");
-  await page.keyboard.press("Alt+KeyT");
+  await expect(waiting).toHaveCount(0);
+  await pressShortcut(page.keyboard, "Control+Shift+Period KeyQ");
+  await pressShortcut(page.keyboard, "Control+Shift+Period KeyS");
+  await pressShortcut(page.keyboard, "Control+Shift+Period KeyT");
   await page.keyboard.press("Alt+Enter");
-  await page.keyboard.press("Control+Shift+Slash");
+  await pressShortcut(page.keyboard, "Control+Shift+Period Slash");
   await expect(page.getByRole("dialog", { name: "编辑 Markdown", exact: true })).toHaveCount(0);
   await expect(page.getByRole("dialog", { name: "Markdown 语法帮助", exact: true })).toHaveCount(0);
   expect(await saved(page)).toBe(original);
 
   await showRenderedDescription(page);
-  await page.keyboard.press("Control+Shift+KeyK");
+  await pressShortcut(page.keyboard, "Control+Shift+Period KeyC");
   await expect(rendered(page)).toBeVisible();
   expect(await saved(page)).toBe(original);
 });
@@ -1358,7 +1372,7 @@ test("全屏和语法帮助快捷键保留选区，小窗口自动保存", async
   const original = "## 实时描述\n\n正文";
   await notes(page).fill(original);
   await select(page, original.length - 1, original.length - 1);
-  await notes(page).press("Control+Shift+Slash");
+  await pressShortcut(notes(page), "Control+Shift+Period Slash");
   const help = page.getByRole("dialog", { name: "Markdown 语法帮助", exact: true });
   await expect(help).toBeVisible();
   await page.keyboard.press("Escape");
@@ -1374,7 +1388,7 @@ test("全屏和语法帮助快捷键保留选区，小窗口自动保存", async
   await expect(notes(page)).toHaveValue("## 实时描述\n\n正在此文");
   await command(page, "实时编辑描述");
   await expect(rendered(page).getByRole("heading", { name: "实时描述", exact: true })).toBeVisible();
-  await page.keyboard.press("Control+Shift+Slash");
+  await pressShortcut(page.keyboard, "Control+Shift+Period Slash");
   await expect(help).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(help).toHaveCount(0);

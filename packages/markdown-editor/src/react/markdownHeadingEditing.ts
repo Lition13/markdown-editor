@@ -47,14 +47,6 @@ export function handleHeadingKey(event: KeyboardEvent, view: EditorView) {
   const heading = headingAt(state, cursor.from);
   const mod = event.ctrlKey || event.metaKey;
   const key = event.key;
-  if (mod && !event.altKey && !event.shiftKey) {
-    if (/^[0-6]$/.test(key)) return setHeadingLevel(view, Number(key));
-    if (key === "=" || key === "-") {
-      const depth = heading?.depth;
-      if (key === "=") return setHeadingLevel(view, Math.max(1, (depth ?? 7) - 1));
-      if (depth) return setHeadingLevel(view, depth === 6 ? 0 : depth + 1);
-    }
-  }
   if (!heading || cursor.to > heading.to || mod) return false;
   const sameLevel = event.altKey && event.shiftKey;
   if (key === "Enter" && (sameLevel || (!event.altKey && !event.shiftKey))) {
@@ -72,4 +64,11 @@ export function handleHeadingKey(event: KeyboardEvent, view: EditorView) {
     return true;
   }
   return false;
+}
+
+export function applyHeadingShortcut(view: EditorView, action: number | "raise" | "lower") {
+  if (typeof action === "number") return setHeadingLevel(view, action);
+  const heading = headingAt(view.state, view.state.selection.main.from);
+  if (action === "raise") return setHeadingLevel(view, Math.max(1, (heading?.depth ?? 7) - 1));
+  return Boolean(heading && setHeadingLevel(view, heading.depth === 6 ? 0 : heading.depth + 1));
 }

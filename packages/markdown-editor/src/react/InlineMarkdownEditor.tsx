@@ -10,19 +10,19 @@ import { openMarkdownLink, useMarkdownEnvironment, type EditorEnvironment } from
 import { createEnvironmentStore, widgetEnvironment } from "./widgetEnvironment";
 import { codeFenceAt, enterPreviousMarkdownBlock, findHeading, handleMarkdownBlockArrow, markdownBlockAt, markdownProjection, paragraphJoinAt, projection, projectionComposition, refreshProjection } from "./markdownProjection";
 import { handleCodeBlockBackspace, handleCodeFenceKey, insertIntoEmptyFence, markdownCodeCompletion } from "./markdownCodeCompletion";
-import { handleHeadingKey, setHeadingLevel } from "./markdownHeadingEditing";
+import { applyHeadingShortcut, handleHeadingKey } from "./markdownHeadingEditing";
 import { isTableHistoryKey, requestTableFocus } from "./markdownLiveTable";
 import { completedSymbolPair } from "./markdownPairComposition";
 import type { MenuPoint } from "./ActionMenu";
 
 export type MarkdownKeystroke = Pick<KeyboardEvent,
-  "key" | "code" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey" | "repeat" | "defaultPrevented" | "preventDefault" | "stopPropagation"
+  "key" | "code" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey" | "repeat" | "defaultPrevented" | "getModifierState" | "preventDefault" | "stopPropagation"
 >;
 export interface InlineMarkdownHandle {
   selection(): TextSelection;
   focus(range: TextSelection, align?: "start"): void;
   point(position: number): MenuPoint | undefined;
-  setHeading(depth: number): boolean;
+  setHeading(depth: number | "raise" | "lower"): boolean;
   insertTable(source: string, range: TextSelection): void;
 }
 
@@ -33,6 +33,7 @@ type Props = {
   focusOnMount: boolean | "start";
   onEdit(value: string, before: TextSelection, after: TextSelection, kind?: string): void;
   onMove(): void;
+  hasKeySequence(): boolean;
   onKey(event: MarkdownKeystroke, composing: boolean): boolean;
   onSlash(range: TextSelection, point: MenuPoint): boolean;
   onImages(files: File[]): void;
@@ -199,7 +200,7 @@ export default function InlineMarkdownEditor(props: Props) {
   useImperativeHandle(props.ref, () => ({
     selection: () => editor.current ? sourceSelection(editor.current.state) : latest.current.cursor.current,
     point: position => editor.current ? caretPoint(editor.current, position) : undefined,
-    setHeading: depth => editor.current ? setHeadingLevel(editor.current, depth) : false,
+    setHeading: depth => editor.current ? applyHeadingShortcut(editor.current, depth) : false,
     insertTable(source, range) {
       const view = editor.current;
       if (!view) return;
@@ -259,8 +260,10 @@ export default function InlineMarkdownEditor(props: Props) {
             keydown(event, view) {
               const composing = event.isComposing || view.compositionStarted;
               if (!view.hasFocus) return isTableHistoryKey(event) && latest.current.onKey(event, composing);
+              const prefixed = latest.current.hasKeySequence();
+              if (prefixed && latest.current.onKey(event, composing)) return true;
               if (!composing && (handleCodeFenceKey(event, view) || handleMarkdownBlockArrow(event, view) || handleHeadingKey(event, view))) return true;
-              if (latest.current.onKey(event, composing)) return true;
+              if (!prefixed && latest.current.onKey(event, composing)) return true;
               if (composing) return false;
               const mod = event.ctrlKey || event.metaKey;
               if (event.key === "/" && !mod && !event.altKey

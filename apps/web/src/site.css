@@ -354,8 +354,21 @@ dialog.side-panel::backdrop { background: #101a3278; }
   text-align: left;
   font-size: .9rem;
   cursor: pointer;
+  user-select: none;
 }
 .file-open svg { flex: none; color: var(--muted); }
+.file-drag-handle {
+  display: inline-grid;
+  place-items: center;
+  align-self: stretch;
+  flex: none;
+  width: 14px;
+  margin-inline: -4px -3px;
+  touch-action: none;
+  cursor: grab;
+}
+.file-open[data-dragging="true"] { opacity: .55; cursor: grabbing; }
+.file-open[data-dragging="true"] .file-drag-handle { cursor: grabbing; }
 .folder-row .file-open svg { color: var(--accent); }
 .is-current .file-open svg { color: var(--accent); }
 .is-current .file-list-name { font-weight: 620; }
@@ -378,9 +391,46 @@ dialog.side-panel::backdrop { background: #101a3278; }
   color: var(--muted);
   font-size: .9rem;
 }
-.library-footer {
-  padding: 10px 12px;
+.library-destinations {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: min(38dvh, 240px);
+  padding: 8px;
   border-top: 1px solid var(--edge);
+  background: var(--panel);
+  font-size: .8125rem;
+}
+.destination-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  margin: 0 0 5px;
+  font-weight: 620;
+}
+.destination-heading span { min-width: 0; overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
+.library-destinations ul { min-height: 0; margin: 0; padding: 1px; overflow: auto; overscroll-behavior: contain; list-style: none; }
+.library-destinations li > :is(button, div) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  width: 100%;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  background: transparent;
+  text-align: start;
+}
+.library-destinations button { cursor: pointer; }
+.library-destinations button:hover { background: var(--panel-soft); }
+.library-destinations svg { flex: none; color: var(--accent); }
+.library-destinations li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.destination-empty {
+  margin: 0 5px;
   color: var(--muted);
   font-size: .8125rem;
 }
@@ -406,6 +456,13 @@ dialog.side-panel::backdrop { background: #101a3278; }
 }
 .folder-path > span > :not(svg) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folder-path [aria-current] { font-weight: 620; color: var(--text); }
+.file-manager [data-drop-active="true"] {
+  border-radius: 6px;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--soft-accent);
+  color: var(--accent);
+}
 .outline-links { padding: 9px 7px; display: grid; gap: 2px; }
 .outline-links button {
   min-height: 32px;
@@ -442,4 +499,5 @@ dialog.side-panel::backdrop { background: #101a3278; }
   :root { --toolbar-edge: 34px; --toolbar-row: 50px; }
   .toolbar-handle-label { display: inline; }
   .workbench-toolbar .panel-toggle, .workbench-toolbar .icon-control, .view-options button { min-height: 36px; }
+  .file-drag-handle { width: 28px; margin-inline-end: -4px; }
 }

@@ -5,12 +5,13 @@ import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { cellsRemovedByResize, changeMarkdownTable, serializeMarkdownTable, tableCellChange, tableModel, type MarkdownTable, type TableCellAddress, type TableCellRange, type TableCommand, type TableLayout } from "../core/markdownTable";
 import { pairedSymbolAfterInput } from "../core/markdownPairs";
-import { formatMarkdownInline, isInlineMarkdownFormat, markdownShortcut } from "../core/markdownShortcuts";
+import { editorShortcutPrefix, formatMarkdownInline, isInlineMarkdownFormat, markdownShortcut, markdownTableMove, markdownTableMoveLabel } from "../core/markdownShortcuts";
 import { completedSymbolPair } from "./markdownPairComposition";
 import ActionMenu, { eventPoint, type ActionItem, type MenuPoint } from "./ActionMenu";
 import MarkdownContent, { type MarkdownCellPosition } from "./MarkdownContent";
 import MarkdownTableSize from "./MarkdownTableSize";
 import { copyMarkdownText, useMarkdownEnvironment } from "./editorContext";
+import { useMarkdownKeySequence } from "./useMarkdownKeySequence";
 import { WidgetEnvironment, widgetEnvironment } from "./widgetEnvironment";
 
 type ReadTable = (view: EditorView, from: number) => TableLayout | undefined;
@@ -68,6 +69,7 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
   leaveTable: LeaveTable;
 }) {
   const environment = useMarkdownEnvironment();
+  const keySequence = useMarkdownKeySequence();
   const [editing, setEditing] = useState<CellEdit | null>(null);
   const [panel, setPanel] = useState<TablePanel | null>(null);
   const [copyFeedback, setCopyFeedback] = useState("");
@@ -215,7 +217,9 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
   const handleKeys = (event: KeyboardEvent<HTMLInputElement>, entry: CellEdit) => {
     const input = event.currentTarget;
     if (event.nativeEvent.isComposing || compositionStart.current !== null || input !== input.ownerDocument.activeElement) return;
-    const action = markdownShortcut(event);
+    const prefixed = keySequence.read(event);
+    if (prefixed === null) return;
+    const action = markdownShortcut(event, prefixed);
     if (isInlineMarkdownFormat(action)) {
       event.preventDefault();
       event.stopPropagation();
@@ -231,14 +235,15 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
     const mod = event.ctrlKey || event.metaKey;
     const { row, column } = entry;
     const { key } = event;
-    if (event.altKey && !mod && !event.shiftKey && /^Arrow(?:Up|Down|Left|Right)$/.test(key)) {
-      const kind = key === "ArrowUp" || key === "ArrowDown" ? "move-row" : "move-column";
-      const direction = key === "ArrowUp" || key === "ArrowLeft" ? -1 : 1;
+    const move = markdownTableMove(event, prefixed);
+    if (move) {
+      const kind = move === "ArrowUp" || move === "ArrowDown" ? "move-row" : "move-column";
+      const direction = move === "ArrowUp" || move === "ArrowLeft" ? -1 : 1;
       changeStructure({ kind, direction }, entry);
     } else if (event.altKey) return;
     else if (key === "Backspace" && mod && event.shiftKey) changeStructure({ kind: "delete-row" }, entry);
     else if (key === "Escape") leave();
-    else if (event.key === "Enter" && mod) insertRow(row, column);
+    else if (event.key === "Enter" && mod && !event.shiftKey) insertRow(row, column);
     else if (mod) return;
     else if (!event.shiftKey && (key === "ArrowUp" || key === "ArrowDown")) {
       const down = key === "ArrowDown";
@@ -293,7 +298,10 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
       }}>
       <span className={entry ? "notes-table-cell-hidden" : undefined} aria-hidden={!!entry}>{children}</span>
       {entry && <input key={entry.key} ref={bindField} aria-label={`编辑${label}`} value={entry.draft} spellCheck={false}
-        onCompositionStart={() => { compositionStart.current = entry.draft; }}
+        onCompositionStart={() => {
+          keySequence.reset();
+          compositionStart.current = entry.draft;
+        }}
         onCompositionEnd={event => {
           const before = compositionStart.current;
           compositionStart.current = null;
@@ -322,7 +330,11 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
           const input = event.currentTarget;
           cellSelection.current = { start: input.selectionStart ?? 0, end: input.selectionEnd ?? 0 };
         }}
-        onBlur={() => { if (!panelRef.current) setEditing(active => active?.key === entry.key ? null : active); }}
+        onPointerDown={keySequence.reset}
+        onBlur={() => {
+          keySequence.reset();
+          if (!panelRef.current) setEditing(active => active?.key === entry.key ? null : active);
+        }}
         onKeyDown={event => handleKeys(event, entry)} />}
     </span>;
   };
@@ -374,10 +386,10 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
       action("col-before", "左侧插入列", { kind: "insert-column", direction: -1 }),
       action("col-after", "右侧插入列", { kind: "insert-column", direction: 1 }),
       { id: "move-divider", separator: true },
-      action("row-up", "上移该行", { kind: "move-row", direction: -1 }, row <= 1, "Alt ↑"),
-      action("row-down", "下移该行", { kind: "move-row", direction: 1 }, row === 0 || row === layout.rows.length - 1, "Alt ↓"),
-      action("col-left", "左移该列", { kind: "move-column", direction: -1 }, column === 0, "Alt ←"),
-      action("col-right", "右移该列", { kind: "move-column", direction: 1 }, column === layout.columns - 1, "Alt →"),
+      action("row-up", "上移该行", { kind: "move-row", direction: -1 }, row <= 1, markdownTableMoveLabel("ArrowUp")),
+      action("row-down", "下移该行", { kind: "move-row", direction: 1 }, row === 0 || row === layout.rows.length - 1, markdownTableMoveLabel("ArrowDown")),
+      action("col-left", "左移该列", { kind: "move-column", direction: -1 }, column === 0, markdownTableMoveLabel("ArrowLeft")),
+      action("col-right", "右移该列", { kind: "move-column", direction: 1 }, column === layout.columns - 1, markdownTableMoveLabel("ArrowRight")),
       { id: "table-divider", separator: true },
       action("row-remove", "删除行", { kind: "delete-row" }, row === 0, "Ctrl Shift ⌫"),
       action("col-remove", "删除列", { kind: "delete-column" }, layout.columns === 1),
@@ -391,6 +403,9 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
   }
 
   return <>
+    {keySequence.waiting && environment.overlay && createPortal(
+      <div className="notes-key-sequence" role="status">已输入 {editorShortcutPrefix}，等待下一个键</div>, environment.overlay,
+    )}
     {active && environment.overlay && createPortal(<div ref={toolbar} className="notes-table-toolbar" role="toolbar" aria-label="表格工具" onMouseDown={event => event.preventDefault()}>
       <button type="button" aria-label="调整表格大小" title="调整行列数" onClick={event => openPanel("size", active, event)}><Table2 size={15} /></button>
       {alignments.map(({ value, label, Icon }) => (

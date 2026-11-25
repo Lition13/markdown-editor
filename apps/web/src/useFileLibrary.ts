@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  addFiles, addFolder, exampleFile, fileEntry, folderRemoval, movedFile, moveFile, newFiles, newFolder,
+  addFiles, addFolder, exampleFile, fileEntry, folderRemoval, movedFile, movedFolder, moveFile, moveFolder, newFiles, newFolder,
   openFile, readLibrary, removeFile, removeFolder, renamedFile, renamedFolder, renameFile, renameFolder,
   saveContent, sortByName, type FileEntry, type FileInput, type FolderEntry, type MarkdownFile,
 } from "./files";
@@ -148,6 +148,11 @@ export function useFileLibrary() {
     setFolders(previous => sortByName(previous.map(folder => folder.id === id ? entry : folder)));
   }
 
+  async function relocateFolder(id: string, parentId: string | null) {
+    const entry = memory.current ? movedFolder(folders, id, parentId) : await moveFolder(id, parentId);
+    setFolders(previous => sortByName(previous.map(folder => folder.id === id ? entry : folder)));
+  }
+
   async function deleteFolder(id: string) {
     const result = memory.current ? folderRemoval(folders, files, id) : await removeFolder(id);
     const moved = new Map(result.movedFolders.map(folder => [folder.id, folder]));
@@ -179,7 +184,7 @@ export function useFileLibrary() {
   const unsavedIds = Object.keys(progress).filter(id => typeof progress[id] === "string");
   let status = "已保存到此浏览器";
   if (!ready) status = "正在读取文件…";
-  else if (sessionOnly) status = "浏览器存储不可用，文件仅保留在此页面";
+  else if (sessionOnly) status = "浏览器存储不可用，关闭页面前可导出文件";
   else if (typeof activeSave === "string") status = activeSave;
   else if (activeSave === null) status = "正在保存…";
   else if (unsavedIds.length) status = "有文件尚未保存";
@@ -189,7 +194,7 @@ export function useFileLibrary() {
   }
 
   return {
-    files, folders, current, ready, status, sessionOnly, unsavedIds,
-    change, open, add, rename, move, remove, createFolder, changeFolderName, deleteFolder,
+    files, folders, current, ready, status, unsavedIds,
+    change, open, add, rename, move, remove, createFolder, changeFolderName, relocateFolder, deleteFolder,
   };
 }

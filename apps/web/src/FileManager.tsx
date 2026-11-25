@@ -1,15 +1,15 @@
-import { ChevronRight, Download, FileText, Folder, FolderInput, FolderPlus, PencilLine, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { ChevronRight, Download, FileText, Folder, FolderPlus, GripVertical, PencilLine, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import SidePanel from "./SidePanel";
 import { markdownName, type FileEntry, type FolderEntry, type MarkdownFile } from "./files";
 import type { useFileLibrary } from "./useFileLibrary";
+import { useLibraryDrag } from "./useLibraryDrag";
 
 type FileAction =
   | { type: "new" }
   | { type: "new-folder" }
   | { type: "rename"; file: FileEntry }
   | { type: "delete"; file: FileEntry }
-  | { type: "move"; file: FileEntry }
   | { type: "rename-folder"; folder: FolderEntry }
   | { type: "delete-folder"; folder: FolderEntry };
 
@@ -45,17 +45,15 @@ export default function FileManager({ library, open, compact, onClose }: {
   const [action, setAction] = useState<FileAction | null>(null);
   const [name, setName] = useState("");
   const [folderId, setFolderId] = useState<string | null>(null);
-  const [destination, setDestination] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
-  const folderSelect = useRef<HTMLSelectElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
   const previousControl = useRef<HTMLButtonElement | null>(null);
-  const { files, folders, current, sessionOnly, unsavedIds } = library;
+  const { files, folders, current, unsavedIds } = library;
   const foldersById = new Map(folders.map(folder => [folder.id, folder]));
   const currentFolder = folderId && foldersById.has(folderId) ? folderId : null;
   const path = folderPath(foldersById, currentFolder);
@@ -64,6 +62,22 @@ export default function FileManager({ library, open, compact, onClose }: {
     ? file.name.normalize("NFC").toLowerCase().includes(searchTerm)
     : (file.folderId ?? null) === currentFolder);
   const childFolders = searchTerm ? [] : folders.filter(folder => folder.parentId === currentFolder);
+  const movement = useLibraryDrag({
+    folders: foldersById,
+    open,
+    disabled: busy || !library.ready || Boolean(action),
+    onMove: (entry, target) => run(() => entry.kind === "folder"
+      ? library.relocateFolder(entry.id, target) : library.move(entry.id, target)),
+    fallbackFocus: () => search.current,
+  });
+  const picked = movement.selection;
+  const destinations = picked ? [
+    { id: null, name: "文件库" },
+    ...folders.map(folder => ({
+      id: folder.id,
+      name: folderPath(foldersById, folder.id).map(part => part.name).join(" / "),
+    })),
+  ].filter(folder => movement.canDrop(picked.entry, folder.id)) : [];
 
   useEffect(() => { setFolderId(current?.folderId ?? null); }, [current?.id, current?.folderId]);
   useEffect(() => {
@@ -76,7 +90,6 @@ export default function FileManager({ library, open, compact, onClose }: {
   useEffect(() => {
     if (!action) return;
     if (action.type === "delete" || action.type === "delete-folder") cancelButton.current?.focus();
-    else if (action.type === "move") folderSelect.current?.focus();
     else {
       nameInput.current?.focus();
       nameInput.current?.select();
@@ -84,9 +97,9 @@ export default function FileManager({ library, open, compact, onClose }: {
   }, [action]);
 
   function begin(next: FileAction, button: HTMLButtonElement) {
+    movement.reset();
     previousControl.current = button;
     setError("");
-    if (next.type === "move") setDestination(next.file.folderId ?? "");
     if (next.type === "rename") setName(next.file.name);
     if (next.type === "rename-folder") setName(next.folder.name);
     if (next.type === "new") setName("未命名.md");
@@ -104,6 +117,7 @@ export default function FileManager({ library, open, compact, onClose }: {
   }
 
   function visitFolder(next: string | null) {
+    movement.reset();
     setFolderId(next);
     setQuery("");
     setAction(null);
@@ -112,6 +126,7 @@ export default function FileManager({ library, open, compact, onClose }: {
 
   function dismissPanel() {
     if (locked.current) return;
+    if (movement.cancel()) return;
     if (action) dismissAction();
     else onClose();
   }
@@ -126,7 +141,7 @@ export default function FileManager({ library, open, compact, onClose }: {
       if (activate) {
         setAction(null);
         if (compact) onClose();
-      } else dismissAction();
+      } else if (action) dismissAction();
     } catch (error) {
       setError(error instanceof Error && !(error instanceof DOMException)
         ? error.message : "无法读取或保存文件，请重试。");
@@ -197,12 +212,13 @@ export default function FileManager({ library, open, compact, onClose }: {
         </label>
         {!searchTerm && path.length > 0 && (
           <nav className="folder-path" aria-label="文件夹路径">
-            <button type="button" disabled={busy} onClick={() => visitFolder(null)}>文件库</button>
+            <button type="button" disabled={busy} {...movement.targetProps(null)} onClick={() => visitFolder(null)}>文件库</button>
             {path.map((folder, index) => (
               <span key={folder.id}>
                 <ChevronRight size={12} aria-hidden="true" />
-                {index === path.length - 1 ? <span aria-current="location" title={folder.name}>{folder.name}</span>
-                  : <button type="button" disabled={busy} title={folder.name} onClick={() => visitFolder(folder.id)}>{folder.name}</button>}
+                {index === path.length - 1 ? <span aria-current="location" title={folder.name} {...movement.targetProps(folder.id)}>{folder.name}</span>
+                  : <button type="button" disabled={busy} title={folder.name} {...movement.targetProps(folder.id)}
+                    onClick={() => visitFolder(folder.id)}>{folder.name}</button>}
               </span>
             ))}
           </nav>
@@ -222,24 +238,6 @@ export default function FileManager({ library, open, compact, onClose }: {
                 }}>确认删除</button>
             </div>
           </div>
-        ) : action?.type === "move" ? (
-          <form className="file-action" onSubmit={event => {
-            event.preventDefault();
-            void run(() => library.move(action.file.id, destination || null));
-          }}>
-            <label htmlFor="library-destination">将「{action.file.name}」移动到</label>
-            <select id="library-destination" ref={folderSelect} value={destination}
-              onChange={event => setDestination(event.currentTarget.value)}>
-              <option value="">文件库</option>
-              {folders.map(folder => (
-                <option key={folder.id} value={folder.id}>{folderPath(foldersById, folder.id).map(part => part.name).join(" / ")}</option>
-              ))}
-            </select>
-            <div className="file-action-buttons">
-              <button type="button" className="button" disabled={busy} onClick={dismissAction}>取消</button>
-              <button type="submit" className="button primary" disabled={busy || destination === (action.file.folderId ?? "")}>移动</button>
-            </div>
-          </form>
         ) : action && (
           <form className="file-action" onSubmit={event => {
             event.preventDefault();
@@ -265,11 +263,13 @@ export default function FileManager({ library, open, compact, onClose }: {
         {error && <p className="library-error" role="alert">{error}</p>}
       </div>
       {matches.length || childFolders.length ? (
-        <ul className="library-files" aria-label="文件和文件夹">
+        <ul className="library-files" aria-label="文件和文件夹" data-file-scroll="">
           {childFolders.map(folder => (
-            <li key={folder.id} className="folder-row">
+            <li key={folder.id} className="folder-row" {...movement.targetProps(folder.id)}>
               <button type="button" className="file-open" title={folder.name} disabled={busy}
+                {...movement.rowProps({ kind: "folder", id: folder.id, name: folder.name, parentId: folder.parentId })}
                 onClick={() => visitFolder(folder.id)}>
+                <span className="file-drag-handle" aria-hidden="true"><GripVertical size={13} /></span>
                 <Folder size={18} aria-hidden="true" />
                 <span className="file-list-name">{folder.name}</span>
               </button>
@@ -286,12 +286,14 @@ export default function FileManager({ library, open, compact, onClose }: {
           {matches.map(file => (
             <li key={file.id} className={current?.id === file.id ? "is-current" : undefined}>
               <button type="button" className="file-open" aria-current={current?.id === file.id ? "true" : undefined}
+                {...movement.rowProps({ kind: "file", id: file.id, name: file.name, parentId: file.folderId ?? null })}
                 title={file.name} disabled={busy} onClick={() => {
                   void run(async () => {
                     await library.open(file.id);
                     visitFolder(file.folderId ?? null);
                   }, true);
                 }}>
+                <span className="file-drag-handle" aria-hidden="true"><GripVertical size={13} /></span>
                 <FileText size={18} aria-hidden="true" />
                 <span className="file-list-name">
                   {file.name}
@@ -300,10 +302,6 @@ export default function FileManager({ library, open, compact, onClose }: {
                   )}
                 </span>
                 {unsavedIds.includes(file.id) && <span className="file-unsaved">未保存</span>}
-              </button>
-              <button type="button" className="icon-control file-row-tool" title="移动到文件夹" aria-label={"移动 " + file.name}
-                disabled={busy} onClick={event => begin({ type: "move", file }, event.currentTarget)}>
-                <FolderInput size={15} aria-hidden="true" />
               </button>
               <button type="button" className="icon-control file-row-tool" title="重命名" aria-label={"重命名 " + file.name}
                 disabled={busy} onClick={event => begin({ type: "rename", file }, event.currentTarget)}>
@@ -322,9 +320,29 @@ export default function FileManager({ library, open, compact, onClose }: {
             : currentFolder ? "此文件夹为空" : "还没有文件。可新建一篇或导入 Markdown 文件。"}
         </p>
       )}
-      <div className="library-footer">
-        {sessionOnly ? "浏览器存储不可用，关闭页面前可导出文件" : "文件保存在此浏览器"}
-      </div>
+      {picked && (
+        <section className="library-destinations" ref={movement.destinations} aria-label="放到文件夹">
+          <p className="destination-heading" role="status">放到文件夹 <span title={picked.entry.name}>{picked.entry.name}</span></p>
+          {destinations.length ? (
+            <ul data-file-scroll="">
+              {destinations.map(folder => (
+                <li key={folder.id ?? "root"}>
+                  {picked.method === "keyboard" ? (
+                    <button type="button" aria-label={"放到 " + folder.name}
+                      onClick={() => movement.choose(folder.id)} title={folder.name}>
+                      <Folder size={15} aria-hidden="true" /><span>{folder.name}</span>
+                    </button>
+                  ) : (
+                    <div {...movement.targetProps(folder.id)} aria-label={"放到 " + folder.name} title={folder.name}>
+                      <Folder size={15} aria-hidden="true" /><span>{folder.name}</span>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : <p className="destination-empty">暂无可放置的文件夹</p>}
+        </section>
+      )}
     </SidePanel>
   );
 }

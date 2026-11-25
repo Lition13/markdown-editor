@@ -7,6 +7,18 @@
 .notes-editor-body {
   min-width: 0;
 }
+.notes-key-sequence {
+  position: fixed;
+  inset: auto 12px 44px auto;
+  z-index: 1100;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--font-label);
+  pointer-events: none;
+}
 .markdown-notes .notes-editor-textarea {
   display: block;
   width: 100%;
