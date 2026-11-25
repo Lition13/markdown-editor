@@ -175,10 +175,12 @@ test("逐字输入三反引号仍可打开代码语言建议并继续成对编�
 test("首击在正文准确落下光标，斜杠菜单按选区应用工具", async ({ page }) => {
   await page.goto("./");
   await expect(page.locator(".save-status")).toHaveText("示例文档");
-  await page.getByLabel("选择 Markdown 文件").setInputFiles({
+  await page.getByRole("button", { name: "文件管理", exact: true }).click();
+  const files = page.getByRole("dialog", { name: "文件管理" });
+  await files.getByLabel("选择 Markdown 文件").setInputFiles({
     name: "首击验收.md", mimeType: "text/markdown", buffer: Buffer.from("这里是一段可点击定位的正文。\n\n下一段"),
   });
-  await expect(page.getByText("首击验收.md")).toBeVisible();
+  await expect(page.locator(".document-name")).toHaveText("首击验收.md");
   const original = await saved(page);
   const firstParagraph = original.split("\n")[0];
   const line = page.locator(".notes-inline-editor .cm-line").filter({ hasText: firstParagraph });
