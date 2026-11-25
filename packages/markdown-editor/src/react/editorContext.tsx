@@ -1,5 +1,6 @@
 import { createContext, useContext, type Ref } from "react";
 import { safeMarkdownUrl } from "../core/markdown";
+import { resolveMarkdownShortcuts, type MarkdownShortcutOverrides } from "../core/markdownShortcuts";
 
 export type MarkdownTheme = "light" | "dark";
 export type MarkdownMode = "live" | "source";
@@ -27,6 +28,7 @@ export interface MarkdownEditorProps extends MarkdownOptions {
   placeholder?: string;
   overlayContainer?: HTMLElement | null;
   overlayTopInset?: number;
+  shortcuts?: MarkdownShortcutOverrides;
 }
 
 export interface MarkdownPreviewProps extends MarkdownOptions {
@@ -43,6 +45,8 @@ export interface EditorEnvironment {
   surface: HTMLElement | null;
   overlay: HTMLElement | null;
   topInset: number;
+  shortcuts: ReturnType<typeof resolveMarkdownShortcuts>;
+  onTableHistory?: (redo: boolean) => void;
 }
 
 export const defaultEnvironment: EditorEnvironment = {
@@ -52,6 +56,7 @@ export const defaultEnvironment: EditorEnvironment = {
   surface: null,
   overlay: null,
   topInset: 0,
+  shortcuts: resolveMarkdownShortcuts(),
 };
 
 export const MarkdownEnvironment = createContext(defaultEnvironment);

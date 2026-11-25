@@ -1,6 +1,6 @@
 import { Annotation, Compartment, EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView, placeholder } from "@codemirror/view";
-import { useImperativeHandle, useLayoutEffect, useRef, useState, type Ref, type RefObject } from "react";
+import { useCallback, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref, type RefObject } from "react";
 import { suppressBackspaceRepeat } from "../core/keyboard";
 import { clampSelection, insertBlock, type TextSelection } from "../core/markdown";
 import { emptyMarkdownMarkerRange } from "../core/markdownList";
@@ -11,7 +11,7 @@ import { createEnvironmentStore, widgetEnvironment } from "./widgetEnvironment";
 import { codeFenceAt, enterPreviousMarkdownBlock, findHeading, handleMarkdownBlockArrow, markdownBlockAt, markdownProjection, paragraphJoinAt, projection, projectionComposition, refreshProjection } from "./markdownProjection";
 import { handleCodeBlockBackspace, handleCodeFenceKey, insertIntoEmptyFence, markdownCodeCompletion } from "./markdownCodeCompletion";
 import { applyHeadingShortcut, handleHeadingKey } from "./markdownHeadingEditing";
-import { isTableHistoryKey, requestTableFocus } from "./markdownLiveTable";
+import { requestTableFocus } from "./markdownLiveTable";
 import { completedSymbolPair } from "./markdownPairComposition";
 import type { MenuPoint } from "./ActionMenu";
 
@@ -35,6 +35,7 @@ type Props = {
   onMove(): void;
   hasKeySequence(): boolean;
   onKey(event: MarkdownKeystroke, composing: boolean): boolean;
+  onHistory(redo: boolean): void;
   onSlash(range: TextSelection, point: MenuPoint): boolean;
   onImages(files: File[]): void;
 };
@@ -172,10 +173,11 @@ export default function InlineMarkdownEditor(props: Props) {
   const host = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView>(null);
   const environment = useMarkdownEnvironment();
-  const [store] = useState(() => createEnvironmentStore(environment));
-  const [presentation] = useState(() => new Compartment());
   const latest = useRef(props);
   latest.current = props;
+  const onTableHistory = useCallback((redo: boolean) => latest.current.onHistory(redo), []);
+  const [store] = useState(() => createEnvironmentStore({ ...environment, onTableHistory }));
+  const [presentation] = useState(() => new Compartment());
 
   function revealAtStart(view: EditorView, selection: { anchor: number; head: number }) {
     const owner = view.dom.ownerDocument;
@@ -259,7 +261,7 @@ export default function InlineMarkdownEditor(props: Props) {
           EditorView.domEventHandlers({
             keydown(event, view) {
               const composing = event.isComposing || view.compositionStarted;
-              if (!view.hasFocus) return isTableHistoryKey(event) && latest.current.onKey(event, composing);
+              if (!view.hasFocus) return false;
               const prefixed = latest.current.hasKeySequence();
               if (prefixed && latest.current.onKey(event, composing)) return true;
               if (!composing && (handleCodeFenceKey(event, view) || handleMarkdownBlockArrow(event, view) || handleHeadingKey(event, view))) return true;
@@ -374,7 +376,7 @@ export default function InlineMarkdownEditor(props: Props) {
 
   useLayoutEffect(() => {
     const previous = store.getSnapshot();
-    store.update(environment);
+    store.update({ ...environment, onTableHistory });
     const view = editor.current;
     const element = host.current;
     if (!view || !element) return;
@@ -386,7 +388,7 @@ export default function InlineMarkdownEditor(props: Props) {
         ...(updateLinks ? [refreshProjection.of(null)] : []),
       ],
     });
-  }, [environment, presentation, store]);
+  }, [environment, onTableHistory, presentation, store]);
 
   useLayoutEffect(() => {
     const view = editor.current;

@@ -6,7 +6,9 @@
 
 「文件管理」以目录树显示文件和文件夹。点击文件夹可原地展开或收起，刷新后保留展开状态。新建和导入使用当前选中的文件夹，点击「文件库」可选择根目录。文件与文件夹可直接拖到目标文件夹或「文件库」，触屏从文件或文件夹图标开始拖动，键盘可在条目上按 Shift+Space 选择放置位置。用「导出」将当前文件保存为 Markdown。
 
-插入表格使用 Ctrl+Shift+Enter。其余编辑快捷键可在正文的斜杠菜单查看。带有「→」的快捷键分两步按，先按 Ctrl+Shift+. 并松开，再按箭头右边的键。
+插入表格默认使用 Ctrl+Shift+Enter。在顶部工具栏点键盘图标打开「快捷键设置」，可以搜索命令、录制或输入组合、停用和恢复默认。设置即时生效并保存在当前浏览器，斜杠菜单和表格菜单会显示当前绑定。带有「→」的快捷键分两步按，先按 Ctrl+Shift+. 并松开，再按箭头右边的键。
+
+快捷键设置会拦截同一编辑场景中的重复组合与常见保留键，其他可能冲突的组合会显示提示。扩展程序和自定义系统键以实际按键行为为准。[Chrome 快捷键](https://support.google.com/chrome/answer/157179?hl=en)、[Edge 快捷键](https://support.microsoft.com/en-gb/edge/keyboard-shortcuts-in-microsoft-edge)、[Firefox 快捷键](https://support.mozilla.org/en-US/kb/keyboard-shortcuts-perform-firefox-tasks-quickly)、[Windows 快捷键](https://support.microsoft.com/en-us/accessibility/windows/keyboard-shortcuts-in-windows)
 
 文件保存在当前浏览器。旧版已保存的草稿会自动迁入文件列表，导入同名文件时会自动加编号。
 
@@ -52,6 +54,9 @@ export function Example() {
 | `onOpenLink` | 宿主处理通过校验的外链或 `#task=` 业务链接。文档内标题和脚注由组件处理 |
 | `copyText` | 宿主提供剪贴板实现，默认使用浏览器剪贴板 |
 | `overlayContainer`、`overlayTopInset` | 指定弹层容器和视口顶部留白，可用于嵌入有固定标题栏的应用 |
+| `shortcuts` | 按命令 ID 覆盖快捷键，例如 `{ table: "Ctrl+Shift+F8" }`，将命令的值设为 `null` 可停用它的快捷键 |
+
+宿主可使用 `markdownShortcutCommands` 显示命令与默认键，使用 `checkMarkdownShortcut` 检查替换组合。自定义快捷键由宿主保存。
 
 包导出 ES 模块、TypeScript 声明和 CSS。React 和 React DOM 由宿主应用提供，KaTeX 字体和按需加载的图表分块随安装包交付。用支持 CSS `@scope` 和 Popover API 的现代浏览器打开编辑器。
 

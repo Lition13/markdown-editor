@@ -1,0 +1,114 @@
+.shortcut-settings {
+  width: min(610px, calc(100vw - 24px));
+  max-width: none;
+  max-height: calc(100dvh - 24px);
+  padding: 0;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 16px 48px #0811204d;
+  overflow: hidden;
+}
+.shortcut-settings::backdrop { background: #101a3278; }
+body:has(.shortcut-settings[open]) { overflow: hidden; }
+.shortcut-settings-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: min(670px, calc(100dvh - 26px));
+}
+.shortcut-settings-heading, .shortcut-settings-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 15px;
+}
+.shortcut-settings-heading { border-bottom: 1px solid var(--edge); }
+.shortcut-settings-heading h2 { margin: 0; font-size: 1.06rem; font-weight: 680; }
+.shortcut-search { margin: 11px 15px 8px; }
+.shortcut-settings-list { padding: 0 15px 10px; overflow: auto; overscroll-behavior: contain; }
+.shortcut-group { margin: 0 0 12px; }
+.shortcut-group h3 {
+  margin: 0;
+  padding: 9px 8px 4px;
+  color: var(--muted);
+  font-size: .8rem;
+  font-weight: 670;
+}
+.shortcut-group ul { margin: 0; padding: 0; list-style: none; }
+.shortcut-entry, .shortcut-fixed { border-bottom: 1px solid var(--edge); }
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 41px;
+  padding: 4px 6px 4px 8px;
+  font-size: .875rem;
+}
+.shortcut-binding, .shortcut-binding-keys { display: flex; align-items: center; gap: 5px; }
+.shortcut-binding {
+  justify-content: flex-end;
+  max-width: 66%;
+  min-height: 32px;
+  padding: 3px 5px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.shortcut-binding-keys { flex-wrap: wrap; justify-content: flex-end; }
+.shortcut-binding svg { flex: none; }
+.shortcut-binding:hover, .shortcut-binding[aria-expanded="true"] { background: var(--soft-accent); color: var(--accent); }
+.shortcut-settings kbd {
+  padding: 2px 5px;
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  background: var(--panel-soft);
+  color: var(--text);
+  font-size: .75rem;
+  white-space: nowrap;
+}
+.shortcut-form {
+  display: grid;
+  gap: 7px;
+  margin: 0 3px 8px;
+  padding: 9px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+.shortcut-input-row, .shortcut-actions { display: flex; gap: 6px; }
+.shortcut-input-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: .875rem;
+}
+.shortcut-input-row input:focus-visible { outline: 1px solid var(--accent); }
+.shortcut-input-row input[aria-invalid="true"] { border-color: var(--error); }
+.shortcut-input-row .button[aria-pressed="true"] { background: var(--soft-accent); color: var(--accent); }
+.shortcut-actions { justify-content: flex-end; flex-wrap: wrap; }
+.shortcut-form .button, .shortcut-settings-footer .button { min-height: 32px; padding-inline: 8px; font-size: .8rem; }
+.shortcut-hint, .shortcut-empty, .shortcut-issue { margin: 0; color: var(--muted); font-size: .8rem; line-height: 1.5; }
+.shortcut-empty { padding: 18px 8px; }
+.shortcut-issue { color: var(--error); }
+.shortcut-issue[data-kind="warning"] { color: #825019; }
+:root[data-theme="dark"] .shortcut-issue[data-kind="warning"] { color: #ffd092; }
+.shortcut-settings-footer { border-top: 1px solid var(--edge); }
+
+@media (max-width: 450px) {
+  .shortcut-settings-heading, .shortcut-settings-footer { padding-inline: 10px; }
+  .shortcut-search { margin-inline: 10px; }
+  .shortcut-settings-list { padding-inline: 10px; }
+  .shortcut-row { padding-inline: 3px; }
+  .shortcut-settings kbd { font-size: .7rem; }
+}

@@ -78,7 +78,14 @@ try {
   await page.getByRole("textbox", { name: "第一个编辑器" }).press("Control+/");
   await page.getByRole("textbox", { name: "第一个编辑器" }).fill("# 已更新");
   await expect(previewPanel.getByRole("heading", { name: "已更新" })).toBeVisible();
-  await page.getByRole("textbox", { name: "第二个编辑器" }).press("/");
+  const second = page.getByRole("textbox", { name: "第二个编辑器" });
+  await second.press("Control+/");
+  await expect(second).not.toHaveClass(/notes-editor-textarea/);
+  await second.press("Control+Shift+F8");
+  await expect(second).toHaveClass(/notes-editor-textarea/);
+  await second.press("Control+Shift+F8");
+  await expect(second).not.toHaveClass(/notes-editor-textarea/);
+  await second.press("/");
   await expect(page.locator('.markdown-overlay[data-theme="dark"]').getByRole("menu")).toBeVisible();
   await page.getByRole("button", { name: "修改第二个编辑器主题" }).click();
   await expect(page.locator(".markdown-overlay[data-theme=light]")).toHaveCount(2);

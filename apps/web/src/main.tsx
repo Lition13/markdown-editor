@@ -1,15 +1,20 @@
-import { inspectMarkdown, MarkdownEditor, type MarkdownEditorHandle, type MarkdownMode, type MarkdownOutlineItem, type MarkdownTheme } from "@lition13/markdown-editor";
-import { CodeXml, FileText, FolderOpen, Github, ListTree, Moon, PanelBottom, PencilLine, Sun, X } from "lucide-react";
+import {
+  inspectMarkdown, MarkdownEditor, readMarkdownShortcutOverrides,
+  type MarkdownEditorHandle, type MarkdownMode, type MarkdownOutlineItem, type MarkdownShortcutOverrides, type MarkdownTheme,
+} from "@lition13/markdown-editor";
+import { CodeXml, FileText, FolderOpen, Github, Keyboard, ListTree, Moon, PanelBottom, PencilLine, Sun, X } from "lucide-react";
 import { StrictMode, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "@lition13/markdown-editor/style.css";
 import FileManager from "./FileManager";
+import ShortcutSettings from "./ShortcutSettings";
 import SidePanel from "./SidePanel";
 import { useFileLibrary } from "./useFileLibrary";
 import "./site.css";
 
 const themeKey = "lition13-markdown-editor-theme";
 const statusKey = "lition13-markdown-editor-status-bar";
+const shortcutsKey = "lition13-markdown-editor-shortcuts";
 const repository = "https://github.com/Lition13/markdown-editor";
 const compactQuery = "(max-width: 840px)";
 
@@ -25,6 +30,10 @@ function readTheme(): MarkdownTheme {
   const theme = preference(themeKey);
   if (theme === "dark" || theme === "light") return theme;
   return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function readShortcuts(): MarkdownShortcutOverrides {
+  try { return readMarkdownShortcutOverrides(JSON.parse(preference(shortcutsKey) ?? "null")); } catch { return {}; }
 }
 
 function useCompactLayout() {
@@ -81,7 +90,7 @@ function Toolbar({ children }: { children: ReactNode }) {
 
 function Workspace({
   library, theme, toggleTheme, compact, filesOpen, outlineOpen, statusOpen, showFiles,
-  toggleFiles, toggleOutline, closeOutline, toggleStatus,
+  toggleFiles, toggleOutline, closeOutline, toggleStatus, shortcuts, showShortcuts,
 }: {
   library: ReturnType<typeof useFileLibrary>;
   theme: MarkdownTheme;
@@ -95,6 +104,8 @@ function Workspace({
   toggleOutline: () => void;
   closeOutline: () => void;
   toggleStatus: () => void;
+  shortcuts: MarkdownShortcutOverrides;
+  showShortcuts: () => void;
 }) {
   const [mode, setMode] = useState<MarkdownMode>("live");
   const [chosenHeading, setChosenHeading] = useState<number>();
@@ -161,6 +172,9 @@ function Workspace({
           onClick={toggleStatus}>
           <PanelBottom size={16} aria-hidden="true" /><span className="tool-label">状态栏</span>
         </button>
+        <button type="button" className="icon-control" aria-label="快捷键设置" title="快捷键设置" aria-haspopup="dialog" onClick={showShortcuts}>
+          <Keyboard size={18} aria-hidden="true" />
+        </button>
         <button type="button" className="icon-control" aria-label={theme === "dark" ? "切换浅色主题" : "切换深色主题"}
           title={theme === "dark" ? "切换浅色主题" : "切换深色主题"} onClick={toggleTheme}>
           {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
@@ -177,6 +191,7 @@ function Workspace({
               theme={theme}
               mode={mode}
               onModeChange={setMode}
+              shortcuts={shortcuts}
               value={current.value}
               onChange={value => change(current.id, value)}
             />
@@ -233,6 +248,9 @@ function App() {
   const [filesVisible, setFilesVisible] = useState(true);
   const [outlineVisible, setOutlineVisible] = useState(true);
   const [statusOpen, setStatusOpen] = useState(() => preference(statusKey) !== "hidden");
+  const [shortcuts, setShortcuts] = useState(readShortcuts);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [shortcutStorageFailed, setShortcutStorageFailed] = useState(false);
   const [drawer, setDrawer] = useState<"files" | "outline" | null>(null);
   const filesOpen = compact ? drawer === "files" : filesVisible;
   const outlineOpen = compact ? drawer === "outline" : outlineVisible;
@@ -259,15 +277,28 @@ function App() {
     else setOutlineVisible(false);
   }
 
+  function updateShortcuts(next: MarkdownShortcutOverrides) {
+    setShortcuts(next);
+    try {
+      localStorage.setItem(shortcutsKey, JSON.stringify(next));
+      setShortcutStorageFailed(false);
+    } catch {
+      setShortcutStorageFailed(true);
+    }
+  }
+
   return (
     <div className="workbench" data-files={!compact && filesOpen} data-outline={!compact && outlineOpen}>
       <Workspace key={library.current?.id ?? "workspace"} library={library} theme={theme}
         compact={compact} filesOpen={filesOpen} outlineOpen={outlineOpen} statusOpen={statusOpen} showFiles={showFiles}
+        shortcuts={shortcuts} showShortcuts={() => setShortcutsOpen(true)}
         toggleTheme={() => setTheme(value => value === "dark" ? "light" : "dark")}
         toggleFiles={filesOpen ? closeFiles : showFiles}
         toggleOutline={outlineOpen ? closeOutline : () => { if (compact) setDrawer("outline"); else setOutlineVisible(true); }}
         closeOutline={closeOutline} toggleStatus={() => setStatusOpen(value => !value)} />
       <FileManager library={library} open={filesOpen} compact={compact} onClose={closeFiles} />
+      {shortcutsOpen && <ShortcutSettings value={shortcuts} onChange={updateShortcuts} onClose={() => setShortcutsOpen(false)}
+        storageFailed={shortcutStorageFailed} />}
     </div>
   );
 }

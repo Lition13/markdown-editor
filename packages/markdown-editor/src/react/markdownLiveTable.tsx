@@ -5,7 +5,8 @@ import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { cellsRemovedByResize, changeMarkdownTable, serializeMarkdownTable, tableCellChange, tableModel, type MarkdownTable, type TableCellAddress, type TableCellRange, type TableCommand, type TableLayout } from "../core/markdownTable";
 import { pairedSymbolAfterInput } from "../core/markdownPairs";
-import { editorShortcutPrefix, formatMarkdownInline, isInlineMarkdownFormat, markdownShortcut, markdownTableMove, markdownTableMoveLabel } from "../core/markdownShortcuts";
+import { formatMarkdownInline, isInlineMarkdownFormat, isNativeHistoryShortcut, type MarkdownShortcutAction } from "../core/markdownShortcuts";
+import { editorShortcutPrefix } from "../core/shortcutKeys";
 import { completedSymbolPair } from "./markdownPairComposition";
 import ActionMenu, { eventPoint, type ActionItem, type MenuPoint } from "./ActionMenu";
 import MarkdownContent, { type MarkdownCellPosition } from "./MarkdownContent";
@@ -29,12 +30,13 @@ type LeaveTable = (view: EditorView, from: number, to: number, down: boolean) =>
 
 const pendingFocus = new WeakMap<EditorView, TableFocus>();
 const mountedFocus = new WeakMap<HTMLElement, () => boolean>();
-export function isTableHistoryKey(event: globalThis.KeyboardEvent) {
-  const target = event.target;
-  if (!(target instanceof HTMLInputElement) || target !== target.ownerDocument.activeElement || !target.closest(".notes-table-cell")) return false;
-  const action = markdownShortcut(event);
-  return action === "undo" || action === "redo";
-}
+const tableStructureShortcuts: Partial<Record<MarkdownShortcutAction, TableCommand>> = {
+  rowUp: { kind: "move-row", direction: -1 },
+  rowDown: { kind: "move-row", direction: 1 },
+  columnLeft: { kind: "move-column", direction: -1 },
+  columnRight: { kind: "move-column", direction: 1 },
+  deleteRow: { kind: "delete-row" },
+};
 
 export function requestTableFocus(view: EditorView, from: number, address: TableCellAddress, caret?: CellCaret) {
   pendingFocus.set(view, { from, address, caret });
@@ -69,6 +71,7 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
   leaveTable: LeaveTable;
 }) {
   const environment = useMarkdownEnvironment();
+  const shortcuts = environment.shortcuts;
   const keySequence = useMarkdownKeySequence();
   const [editing, setEditing] = useState<CellEdit | null>(null);
   const [panel, setPanel] = useState<TablePanel | null>(null);
@@ -219,7 +222,13 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
     if (event.nativeEvent.isComposing || compositionStart.current !== null || input !== input.ownerDocument.activeElement) return;
     const prefixed = keySequence.read(event);
     if (prefixed === null) return;
-    const action = markdownShortcut(event, prefixed);
+    const action = shortcuts.match("table", event, prefixed);
+    if (action === "undo" || action === "redo" || (!action && isNativeHistoryShortcut(event))) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (action && !event.repeat) environment.onTableHistory?.(action === "redo");
+      return;
+    }
     if (isInlineMarkdownFormat(action)) {
       event.preventDefault();
       event.stopPropagation();
@@ -235,15 +244,13 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
     const mod = event.ctrlKey || event.metaKey;
     const { row, column } = entry;
     const { key } = event;
-    const move = markdownTableMove(event, prefixed);
-    if (move) {
-      const kind = move === "ArrowUp" || move === "ArrowDown" ? "move-row" : "move-column";
-      const direction = move === "ArrowUp" || move === "ArrowLeft" ? -1 : 1;
-      changeStructure({ kind, direction }, entry);
+    const structure = action && tableStructureShortcuts[action];
+    if (structure) {
+      if (!event.repeat) changeStructure(structure, entry);
+    } else if (action === "insertRow") {
+      if (!event.repeat) insertRow(row, column);
     } else if (event.altKey) return;
-    else if (key === "Backspace" && mod && event.shiftKey) changeStructure({ kind: "delete-row" }, entry);
     else if (key === "Escape") leave();
-    else if (event.key === "Enter" && mod && !event.shiftKey) insertRow(row, column);
     else if (mod) return;
     else if (!event.shiftKey && (key === "ArrowUp" || key === "ArrowDown")) {
       const down = key === "ArrowDown";
@@ -382,16 +389,16 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
     });
     actions.push(
       action("row-before", "上方插入行", { kind: "insert-row", direction: -1 }, row === 0),
-      action("row-after", "下方插入行", { kind: "insert-row", direction: 1 }, false, "Ctrl Enter"),
+      action("row-after", "下方插入行", { kind: "insert-row", direction: 1 }, false, shortcuts.labels.insertRow),
       action("col-before", "左侧插入列", { kind: "insert-column", direction: -1 }),
       action("col-after", "右侧插入列", { kind: "insert-column", direction: 1 }),
       { id: "move-divider", separator: true },
-      action("row-up", "上移该行", { kind: "move-row", direction: -1 }, row <= 1, markdownTableMoveLabel("ArrowUp")),
-      action("row-down", "下移该行", { kind: "move-row", direction: 1 }, row === 0 || row === layout.rows.length - 1, markdownTableMoveLabel("ArrowDown")),
-      action("col-left", "左移该列", { kind: "move-column", direction: -1 }, column === 0, markdownTableMoveLabel("ArrowLeft")),
-      action("col-right", "右移该列", { kind: "move-column", direction: 1 }, column === layout.columns - 1, markdownTableMoveLabel("ArrowRight")),
+      action("row-up", "上移该行", { kind: "move-row", direction: -1 }, row <= 1, shortcuts.labels.rowUp),
+      action("row-down", "下移该行", { kind: "move-row", direction: 1 }, row === 0 || row === layout.rows.length - 1, shortcuts.labels.rowDown),
+      action("col-left", "左移该列", { kind: "move-column", direction: -1 }, column === 0, shortcuts.labels.columnLeft),
+      action("col-right", "右移该列", { kind: "move-column", direction: 1 }, column === layout.columns - 1, shortcuts.labels.columnRight),
       { id: "table-divider", separator: true },
-      action("row-remove", "删除行", { kind: "delete-row" }, row === 0, "Ctrl Shift ⌫"),
+      action("row-remove", "删除行", { kind: "delete-row" }, row === 0, shortcuts.labels.deleteRow),
       action("col-remove", "删除列", { kind: "delete-column" }, layout.columns === 1),
       { id: "copy", label: "复制表格", keepOpen: true, run: () => void copyTable() },
       { id: "format", label: "格式化表格源码", keepOpen: true, run: () => {
@@ -444,9 +451,6 @@ export class LiveTableWidget extends WidgetType {
       <EditableTable view={view} host={element} layout={this.layout} read={this.read} leaveTable={this.leaveTable} />
     </WidgetEnvironment>);
     return true;
-  }
-  ignoreEvent(event: Event) {
-    return !(event instanceof KeyboardEvent && event.type === "keydown" && isTableHistoryKey(event));
   }
   destroy(element: HTMLElement) {
     const root = roots.get(element);

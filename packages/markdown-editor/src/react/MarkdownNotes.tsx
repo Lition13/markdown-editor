@@ -41,10 +41,8 @@ import type { InlineMarkdownHandle, MarkdownKeystroke } from "./InlineMarkdownEd
 import { emptyMarkdownMarkerRange, indentListItems } from "../core/markdownList";
 import { suppressBackspaceRepeat } from "../core/keyboard";
 import { pairedSymbolAfterInput } from "../core/markdownPairs";
-import {
-  editorShortcutPrefix, formatMarkdownInline, isInlineMarkdownFormat, markdownHeadingShortcut, markdownHeadingShortcutLabel,
-  markdownShortcut, markdownShortcutLabels as keys,
-} from "../core/markdownShortcuts";
+import { formatMarkdownInline, headingForShortcut, headingShortcuts, isInlineMarkdownFormat, isNativeHistoryShortcut } from "../core/markdownShortcuts";
+import { editorShortcutPrefix } from "../core/shortcutKeys";
 import { useMarkdownKeySequence } from "./useMarkdownKeySequence";
 import { completedSymbolPair } from "./markdownPairComposition";
 import {
@@ -260,6 +258,7 @@ function Editor({
   onExpand?: () => void;
 }) {
   const environment = useMarkdownEnvironment();
+  const keys = environment.shortcuts.labels;
   const ref = useRef<HTMLTextAreaElement>(null);
   const inline = useRef<InlineMarkdownHandle>(null);
   const pendingFocus = useRef<TextSelection | null>(null);
@@ -489,9 +488,13 @@ function Editor({
     const prefixed = keySequence.read(event);
     if (prefixed === null) return true;
     const mod = event.ctrlKey || event.metaKey;
-    const heading = markdownHeadingShortcut(event, prefixed);
+    const shortcut = environment.shortcuts.match(mode, event, prefixed);
+    const heading = headingForShortcut(shortcut);
     if (heading !== undefined) {
-      if (mode === "live") {
+      if (event.repeat) {
+        event.preventDefault();
+        return true;
+      } else if (mode === "live") {
         if (!inline.current?.setHeading(heading)) return false;
       } else {
         if (typeof heading !== "number" || heading === 0 || isInMarkdownFence(latest.current, range().start)) return false;
@@ -501,7 +504,6 @@ function Editor({
       event.stopPropagation();
       return true;
     }
-    const shortcut = markdownShortcut(event, prefixed);
     if (shortcut) {
       if (shortcut === "expand" && !onExpand) return false;
       event.preventDefault();
@@ -523,9 +525,21 @@ function Editor({
         const outdent = shortcut === "outdent";
         edit(indentListItems(value, current, outdent) ?? indentLines(value, current, outdent));
       } else if (!isInMarkdownFence(latest.current, current.start)) {
-        if (shortcut === "table" || shortcut === "link" || shortcut === "image") showPanel(shortcut);
-        else format(shortcut);
+        switch (shortcut) {
+          case "table": case "link": case "image":
+            showPanel(shortcut);
+            break;
+          case "bold": case "italic": case "strike": case "inline": case "bullet": case "ordered":
+          case "task": case "quote": case "code": case "math":
+            format(shortcut);
+            break;
+        }
       }
+      return true;
+    }
+    if (isNativeHistoryShortcut(event)) {
+      event.preventDefault();
+      event.stopPropagation();
       return true;
     }
     if (ref.current && event.key === "/" && !mod && !event.altKey) {
@@ -592,9 +606,9 @@ function Editor({
     { id: "search", search: "搜索描述工具" },
     ...["一", "二", "三", "四", "五", "六"].map((name, index) => {
       const depth = index + 1;
-      return option(`h${depth}`, `${name}级标题`, <Heading size={15} />, () => format(depth), `h${depth} 标题 heading`, markdownHeadingShortcutLabel(depth));
+      return option(`h${depth}`, `${name}级标题`, <Heading size={15} />, () => format(depth), `h${depth} 标题 heading`, keys[headingShortcuts[depth]]);
     }),
-    ...(mode === "live" ? [option("paragraph", "普通段落", <Pilcrow size={15} />, () => format(0), "取消标题 paragraph", markdownHeadingShortcutLabel(0))] : []),
+    ...(mode === "live" ? [option("paragraph", "普通段落", <Pilcrow size={15} />, () => format(0), "取消标题 paragraph", keys.paragraph)] : []),
     option("bold", "描述加粗", <Bold size={15} />, () => format("bold"), "bold 粗体", keys.bold),
     option("italic", "描述斜体", <Italic size={15} />, () => format("italic"), "italic", keys.italic),
     option("strike", "描述删除线", <Strikethrough size={15} />, () => format("strike"), "strike", keys.strike),
@@ -714,6 +728,7 @@ function Editor({
                 onMove={onMove}
                 hasKeySequence={keySequence.isWaiting}
                 onKey={handleKey}
+                onHistory={undoEdit}
                 onSlash={openTools}
                 onImages={files => { void loadImages(files); }}
               />
@@ -754,7 +769,7 @@ function Editor({
             content: panel === "table" ? <MarkdownTableSize initial={{ rows: 3, columns: 2 }} label="插入表格" onApply={insertTable} /> : panel === "help" ? (
               <div className="notes-help-panel">
                 <pre>{"# 一级标题 · ## 二级标题\n**加粗**  *斜体*  ~~删除线~~\n`行内代码`\n- 无序列表\n1. 有序列表\n- [ ] 未完成  - [x] 已完成\n> 引用\n[文字](https://example.com)\n![图片说明](图片地址)\n| 标题 | 标题 |\n| --- | --- |\n| 内容 | 内容 |\n$行内公式$ · $$块级公式$$\n脚注[^1]\n[^1]: 脚注内容"}</pre>
-                <p>输入 / 搜索工具和对应快捷键。带 → 的组合先按左边，再按右边。{keys.table} 插入表格。连续输入 // 插入 /。列表内回车续写，空列表项回车退出。支持粘贴或拖入本地图片。</p>
+                <p>输入 / 搜索工具和对应快捷键。带 → 的组合先按左边，再按右边。{keys.table && `${keys.table} 插入表格。`}连续输入 // 插入 /。列表内回车续写，空列表项回车退出。支持粘贴或拖入本地图片。</p>
               </div>
             ) : (
               <form className="notes-insert-form" onSubmit={e => { e.preventDefault(); insertLink(); }}>

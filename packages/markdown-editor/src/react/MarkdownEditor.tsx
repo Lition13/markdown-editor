@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { releaseBackspaceRepeat } from "../core/keyboard";
+import { resolveMarkdownShortcuts } from "../core/markdownShortcuts";
 import MarkdownNotes from "./MarkdownNotes";
 import { defaultEnvironment, MarkdownEnvironment, type MarkdownEditorProps } from "./editorContext";
 
@@ -19,6 +20,7 @@ export default function MarkdownEditor({
   copyText,
   overlayContainer,
   overlayTopInset = 0,
+  shortcuts,
 }: MarkdownEditorProps) {
   const surface = useRef<HTMLDivElement>(null);
   const [overlay, setOverlay] = useState<HTMLElement | null>(null);
@@ -41,9 +43,11 @@ export default function MarkdownEditor({
     if (overlay) overlay.dataset.theme = theme;
   }, [overlay, theme]);
 
+  const keymap = useMemo(() => shortcuts ? resolveMarkdownShortcuts(shortcuts) : defaultEnvironment.shortcuts, [shortcuts]);
   const environment = useMemo(() => ({
     theme, ariaLabel, placeholder, normalizeLink, onOpenLink, copyText, surface: surface.current, overlay, topInset: overlayTopInset,
-  }), [theme, ariaLabel, placeholder, normalizeLink, onOpenLink, copyText, overlay, overlayTopInset]);
+    shortcuts: keymap,
+  }), [theme, ariaLabel, placeholder, normalizeLink, onOpenLink, copyText, overlay, overlayTopInset, keymap]);
 
   return (
     <div className={`markdown-surface ${className}`} data-theme={theme} ref={surface}>

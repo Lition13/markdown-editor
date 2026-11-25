@@ -39,7 +39,8 @@ function Example() {
       <output aria-label="宿主链接">{opened}</output>
       <output aria-label="宿主剪贴板">{copied}</output>
       <MarkdownEditor value={value} onChange={setValue} ariaLabel="第一个编辑器" />
-      {secondEditor && <MarkdownEditor value="独立的第二篇文档" onChange={() => {}} ariaLabel="第二个编辑器" theme={theme} />}
+      {secondEditor && <MarkdownEditor value="独立的第二篇文档" onChange={() => {}} ariaLabel="第二个编辑器" theme={theme}
+        shortcuts={{ source: "Ctrl+Shift+F8" }} />}
       <section aria-label="只读预览">
         <MarkdownPreview
           value={value}

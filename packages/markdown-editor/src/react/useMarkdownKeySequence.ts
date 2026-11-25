@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { isMarkdownShortcutPrefix, type ShortcutEvent } from "../core/markdownShortcuts";
+import { editorShortcutPrefix, isModifierKey, markdownShortcutFromEvent, type ShortcutEvent } from "../core/shortcutKeys";
 
 type KeyEvent = ShortcutEvent & Pick<KeyboardEvent, "repeat" | "preventDefault" | "stopPropagation">;
 
@@ -14,7 +14,7 @@ export function useMarkdownKeySequence() {
   }
 
   function read(event: KeyEvent) {
-    if (isMarkdownShortcutPrefix(event)) {
+    if (markdownShortcutFromEvent(event) === editorShortcutPrefix) {
       if (!event.repeat) {
         armed.current = true;
         setWaiting(true);
@@ -23,7 +23,7 @@ export function useMarkdownKeySequence() {
       event.stopPropagation();
       return null;
     }
-    if (!armed.current || ["Control", "Meta", "Shift", "Alt", "AltGraph"].includes(event.key)) return false;
+    if (!armed.current || isModifierKey(event.key)) return false;
     reset();
     if (event.key === "Escape") {
       event.preventDefault();
