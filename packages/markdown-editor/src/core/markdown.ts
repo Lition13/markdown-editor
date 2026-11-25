@@ -200,13 +200,18 @@ export function indentLines(
   value: string,
   range: TextSelection,
   outdent = false,
-  width = 4,
+  width: number | "\t" = 4,
+  leadingSpaces = 0,
 ): MarkdownEdit {
   const block = lineRange(value, range),
     lines = value.slice(block.start, block.end).split("\n"),
-    prefix = " ".repeat(width),
-    removable = new RegExp("^(?:\\t| {1," + width + "})"),
-    changed = lines.map((line) => outdent ? line.replace(removable, "") : prefix + line),
+    prefix = width === "\t" ? width : " ".repeat(width),
+    removable = width === "\t" ? /^\t/ : new RegExp("^(?:\\t| {1," + width + "})"),
+    changed = lines.map((line) => {
+      const leading = /^ */.exec(line.slice(0, leadingSpaces))![0];
+      const content = line.slice(leading.length);
+      return leading + (outdent ? content.replace(removable, "") : prefix + content);
+    }),
     text = changed.join("\n");
   if (range.start === range.end) {
     const caret = Math.max(

@@ -57,6 +57,8 @@
   z-index: var(--markdown-overlay-z-index, 1000);
 }
 
+:root:has(dialog.markdown-editor-modal[open]) { overflow: hidden; }
+
 @scope (.markdown-surface) {
   *, *::before, *::after { box-sizing: border-box; }
   :where(button, input, textarea, select) { font: inherit; }
@@ -89,14 +91,6 @@
     font-size: var(--font-caption);
     line-height: 1.5;
   }
-  .icon-button {
-    display: inline-grid;
-    place-items: center;
-    width: 32px;
-    height: 32px;
-    border-radius: var(--radius);
-  }
-  .icon-button:hover { background: var(--hover); }
   .primary-button {
     background: var(--accent);
     color: light-dark(#fff, #111c36);
@@ -105,34 +99,6 @@
     font-size: var(--font-label);
     font-weight: 600;
   }
-  .modal-backdrop {
-    position: fixed;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    padding: 16px;
-    background: #070e2860;
-    z-index: 30;
-  }
-  .modal {
-    display: flex;
-    flex-direction: column;
-    max-height: calc(100dvh - 32px);
-    overflow: hidden;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    box-shadow: var(--shadow);
-  }
-  .modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--border);
-  }
-  .modal-header h2 { font-size: 1rem; }
   .menu-search {
     display: flex;
     align-items: center;

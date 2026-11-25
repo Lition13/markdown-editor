@@ -5,12 +5,13 @@ import GithubSlugger from "github-slugger";
 import katex from "katex";
 import type { Root, RootContent } from "mdast";
 import MarkdownContent from "./MarkdownContent";
-import { resolveMarkdownLink } from "./editorContext";
+import { copyMarkdownText, resolveMarkdownLink } from "./editorContext";
 import { WidgetEnvironment, widgetEnvironment } from "./widgetEnvironment";
 import { markdownLink, taskMarker } from "../core/markdown";
 import { markdownParser } from "../core/markdownAst";
 import { markdownListPrefix } from "../core/markdownList";
 import { highlightCode, readCodeFence, type CodeFence } from "../core/markdownCode";
+import { codeBodyEnd, findCodeFence } from "../core/markdownFence";
 import { headingRegion } from "../core/markdownHeading";
 import { markdownMath } from "../core/markdownPolicy";
 import { createCodeLanguagePicker } from "./markdownLanguagePicker";
@@ -85,9 +86,11 @@ class CodeLanguageField extends WidgetType {
     };
     const picker = createCodeLanguagePicker(language, preview, (next, destination) => {
       if (!view.dom.isConnected) return;
-      const refocus = destination !== null;
+      const refocus = destination === "code" || destination === "below";
       if (refocus) view.focus();
-      const effects = refocus ? [codeLanguageEdit.of(null), projectionFocus.of(true)] : [codeLanguageEdit.of(null)];
+      const draft = destination === "toolbar" ? { from: languageFrom, language: next ?? language } : null;
+      const languageEffect = codeLanguageEdit.of(draft);
+      const effects = refocus ? [languageEffect, projectionFocus.of(true)] : [languageEffect];
       if (destination === "below") {
         const current = codeFenceAt(view.state, view.state.selection.main.head);
         view.dispatch({ effects });
@@ -98,7 +101,65 @@ class CodeLanguageField extends WidgetType {
         view.dispatch({ changes: { from: languageFrom, to: languageTo, insert: next }, effects, userEvent: "input.code-language" });
       } else view.dispatch({ effects });
     }, () => view.state.facet(widgetEnvironment).getSnapshot().topInset);
-    languagePickers.set(picker.footer, picker);
+    const action = (label: string, text: string) => {
+      const button = picker.footer.ownerDocument.createElement("button");
+      button.type = "button";
+      button.className = "notes-code-action";
+      button.setAttribute("aria-label", label);
+      button.textContent = text;
+      button.addEventListener("mousedown", event => { if (event.button === 0) event.preventDefault(); });
+      button.addEventListener("focus", () => preview(language));
+      return button;
+    };
+    const copy = action("复制代码", "复制");
+    let copyFeedback: ReturnType<typeof setTimeout> | undefined;
+    copy.addEventListener("click", async () => {
+      const node = markdownBlockAt(view.state, this.fence.from);
+      if (node?.type !== "code") return;
+      try {
+        await copyMarkdownText(node.value, view.state.facet(widgetEnvironment).getSnapshot());
+        if (!copy.isConnected) return;
+        copy.textContent = "已复制";
+        clearTimeout(copyFeedback);
+        copyFeedback = setTimeout(() => { copy.textContent = "复制"; }, 1800);
+      } catch {
+        if (copy.isConnected) copy.textContent = "复制失败";
+      }
+    });
+    const leave = action("继续正文", "继续正文");
+    leave.addEventListener("click", () => {
+      const fence = codeFenceAt(view.state, this.fence.from);
+      if (!fence) return;
+      view.dispatch({ effects: codeLanguageEdit.of(null) });
+      leaveMarkdownBlock(view, fence.from, fence.to, true);
+    });
+    picker.footer.prepend(copy, leave);
+    const controls = [copy, leave, picker.input];
+    picker.footer.addEventListener("keydown", event => {
+      if (event.key !== "Tab" || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
+      const current = controls.findIndex(control => control === event.target);
+      const next = controls[current + (event.shiftKey ? -1 : 1)];
+      if (current < 0 || !next) return;
+      event.preventDefault();
+      event.stopPropagation();
+      next.focus();
+    });
+    picker.footer.addEventListener("focusout", () => {
+      queueMicrotask(() => {
+        const footer = picker.footer;
+        if (!footer.isConnected || footer.contains(footer.ownerDocument.activeElement)) return;
+        if (view.state.field(projection).codeLanguage?.from === languageFrom) {
+          view.dispatch({ effects: codeLanguageEdit.of(null) });
+        }
+      });
+    });
+    languagePickers.set(picker.footer, {
+      ...picker,
+      dispose() {
+        clearTimeout(copyFeedback);
+        picker.dispose();
+      },
+    });
     return picker.footer;
   }
   destroy(element: HTMLElement) {
@@ -230,7 +291,7 @@ function project(state: EditorState, tree: Root, focused: boolean, codeLanguage:
       const fence = readCodeFence(source, from, to);
       const end = fence?.closerFrom;
       if (fence && end != null) {
-        const bodyEnd = Math.max(fence.bodyFrom, end - 1);
+        const bodyEnd = codeBodyEnd(fence);
         if (!active(fence.bodyFrom, bodyEnd)) {
           replace(from, to, new RenderedMarkdown(raw, true, {
             from: fence.bodyFrom - from, to: bodyEnd - from,
@@ -464,15 +525,7 @@ export function paragraphJoinAt(state: EditorState, position: number, backwards:
 }
 
 export function codeFenceAt(state: EditorState, position: number): CodeFence | null {
-  for (const node of state.field(projection).tree.children) {
-    if (node.type !== "code") continue;
-    const from = node.position?.start.offset;
-    const to = node.position?.end.offset;
-    if (from !== undefined && to !== undefined && from <= position && position <= to) {
-      return readCodeFence(state.doc.toString(), from, to);
-    }
-  }
-  return null;
+  return findCodeFence(state.field(projection).tree, position, () => state.doc.toString());
 }
 
 type MarkdownRegion = { node: RootContent; from: number; to: number };
@@ -544,7 +597,7 @@ function enterMarkdownBlock(view: EditorView, block: MarkdownRegion, down: boole
     const fence = readCodeFence(state.doc.toString(), from, to);
     if (fence?.closerFrom != null) {
       start = fence.bodyFrom;
-      end = Math.max(start, fence.closerFrom - 1);
+      end = codeBodyEnd(fence);
     }
   } else if (node.type === "math") {
     ({ from: start, to: end } = formulaBody(state, block));
@@ -604,7 +657,7 @@ export function handleMarkdownBlockArrow(event: KeyboardEvent, view: EditorView)
   const next = view.moveVertically(cursor, down);
   const column = countColumn(state.sliceDoc(line.from, cursor.head), state.tabSize);
   const fence = current?.node.type === "code" ? readCodeFence(state.doc.toString(), current.from, current.to) : null;
-  const body = fence?.closerFrom != null ? { from: fence.bodyFrom, to: Math.max(fence.bodyFrom, fence.closerFrom - 1) }
+  const body = fence?.closerFrom != null ? { from: fence.bodyFrom, to: codeBodyEnd(fence) }
     : current?.node.type === "math" ? formulaBody(state, current) : null;
   if (current && body) {
     if (down ? cursor.head < body.from : cursor.head > body.to) return enterMarkdownBlock(view, current, down, column, next.goalColumn);

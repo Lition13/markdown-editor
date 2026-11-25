@@ -1,3 +1,5 @@
+import type { Root } from "mdast";
+
 export interface CodeFence {
   from: number;
   to: number;
@@ -9,6 +11,22 @@ export interface CodeFence {
   languageTo: number;
   bodyFrom: number;
   closerFrom: number | null;
+}
+
+export function findCodeFence(tree: Root, position: number, readSource: () => string) {
+  for (const node of tree.children) {
+    if (node.type !== "code") continue;
+    const from = node.position?.start.offset;
+    const to = node.position?.end.offset;
+    if (from !== undefined && to !== undefined && from <= position && position <= to) {
+      return readCodeFence(readSource(), from, to);
+    }
+  }
+  return null;
+}
+
+export function codeBodyEnd(fence: CodeFence) {
+  return fence.closerFrom === null ? fence.to : Math.max(fence.bodyFrom, fence.closerFrom - 1);
 }
 
 export function readCodeFence(value: string, from: number, to: number): CodeFence | null {
@@ -32,7 +50,7 @@ export function readCodeFence(value: string, from: number, to: number): CodeFenc
 
 export function emptyCodeFenceRemoval(value: string, fence: CodeFence): { from: number; to: number } | null {
   const { bodyFrom, closerFrom } = fence;
-  if (closerFrom === null || value.slice(bodyFrom, Math.max(bodyFrom, closerFrom - 1)).trim()) return null;
+  if (closerFrom === null || value.slice(bodyFrom, codeBodyEnd(fence)).trim()) return null;
   const from = fence.from === 0 ? 0 : value.lastIndexOf("\n", fence.from - 1) + 1;
   if (value[fence.to] !== "\n") return { from, to: fence.to };
 

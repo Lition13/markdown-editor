@@ -3,10 +3,13 @@ import { EditorView, placeholder } from "@codemirror/view";
 import { useCallback, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref, type RefObject } from "react";
 import { suppressBackspaceRepeat } from "../core/keyboard";
 import { clampSelection, insertBlock, type TextSelection } from "../core/markdown";
+import { codeIndentBackspace, codeLineBreak, withinCodeBody } from "../core/markdownCodeEditing";
+import { codeBodyEnd } from "../core/markdownFence";
 import { emptyMarkdownMarkerRange } from "../core/markdownList";
 import { isPairedSymbol, pairedSymbolChange } from "../core/markdownPairs";
 import { completeTableHeader } from "../core/markdownTable";
 import { openMarkdownLink, useMarkdownEnvironment, type EditorEnvironment } from "./editorContext";
+import { editorViewport } from "./editorViewport";
 import { createEnvironmentStore, widgetEnvironment } from "./widgetEnvironment";
 import { codeFenceAt, enterPreviousMarkdownBlock, findHeading, handleMarkdownBlockArrow, markdownBlockAt, markdownProjection, paragraphJoinAt, projection, projectionComposition, refreshProjection } from "./markdownProjection";
 import { handleCodeBlockBackspace, handleCodeFenceKey, insertIntoEmptyFence, markdownCodeCompletion } from "./markdownCodeCompletion";
@@ -123,6 +126,15 @@ function insertLineBreak(view: EditorView, soft: boolean) {
   const { state } = view;
   const { from, to } = state.selection.main;
   if (insertIntoEmptyFence(view, from, to, "\n") || insertAtBlockEdge(view, from, to, "")) return;
+  const fence = codeFenceAt(state, from);
+  if (fence && withinCodeBody(fence, { start: from, end: to })) {
+    const { insert, caret } = codeLineBreak(state.doc.toString(), { start: from, end: to }, fence, soft);
+    view.dispatch({
+      changes: { from, to, insert },
+      selection: { anchor: from + caret }, scrollIntoView: true, userEvent: "input.structure",
+    });
+    return;
+  }
   const current = state.doc.lineAt(from);
   const block = markdownBlockAt(state, from);
   if (!soft && from === to && from === current.to && block?.type === "paragraph") {
@@ -146,6 +158,25 @@ function insertLineBreak(view: EditorView, soft: boolean) {
   const single = soft || !current.text.trim() || preservesIndent || block?.type === "math" || block?.type === "html";
   const text = single ? "\n" + indent : "\n\n";
   view.dispatch(state.replaceSelection(text), { scrollIntoView: true, userEvent: "input.structure" });
+}
+
+function deleteCodeIndent(view: EditorView) {
+  const selection = sourceSelection(view.state);
+  const fence = codeFenceAt(view.state, selection.start);
+  const range = fence && codeIndentBackspace(view.state.doc.toString(), selection, fence);
+  if (!range) return false;
+  view.dispatch({
+    changes: { from: range.start, to: range.end }, selection: { anchor: range.start },
+    scrollIntoView: true, userEvent: "input.structure",
+  });
+  return true;
+}
+
+function atClosingCodeFence(state: EditorState) {
+  const cursor = state.selection.main;
+  if (!cursor.empty) return false;
+  const fence = codeFenceAt(state, cursor.head);
+  return fence?.closerFrom != null && cursor.head === codeBodyEnd(fence);
 }
 
 function removeEmptyMarkdownMarker(view: EditorView, repeat = false) {
@@ -179,21 +210,16 @@ export default function InlineMarkdownEditor(props: Props) {
   const [store] = useState(() => createEnvironmentStore({ ...environment, onTableHistory }));
   const [presentation] = useState(() => new Compartment());
 
-  function revealAtStart(view: EditorView, selection: { anchor: number; head: number }) {
-    const owner = view.dom.ownerDocument;
-    const style = getComputedStyle(owner.documentElement);
-    const top = (parseFloat(style.scrollPaddingTop) || 0) + 8;
-    const bottom = parseFloat(style.scrollPaddingBottom) || 0;
-    const effects = EditorView.scrollIntoView(selection.head, { y: "start", yMargin: top });
+  function revealSelection(view: EditorView, selection: { anchor: number; head: number }, align?: "start") {
+    const frame = editorViewport(view.dom);
+    const effects = EditorView.scrollIntoView(selection.head, { y: align ?? "nearest", yMargin: frame?.margin ?? 8 });
     view.dispatch({ selection, effects });
     const selectedDocument = view.state.doc;
-    const viewport = owner.defaultView;
-    viewport?.requestAnimationFrame(() => {
+    frame?.viewport.requestAnimationFrame(() => {
       if (editor.current !== view || view.state.doc !== selectedDocument || view.state.selection.main.head !== selection.head) return;
       // The projected lines can grow after a distant section enters the viewport.
       const caret = view.coordsAtPos(selection.head);
-      const scroller = view.scrollDOM.getBoundingClientRect();
-      if (!caret || caret.top < Math.max(top, scroller.top) || caret.bottom > Math.min(viewport.innerHeight - bottom, scroller.bottom)) {
+      if (!caret || caret.top < frame.top || caret.bottom > frame.bottom) {
         view.dispatch({ effects });
       }
     });
@@ -219,9 +245,7 @@ export default function InlineMarkdownEditor(props: Props) {
       const view = editor.current;
       if (!view) return;
       view.focus();
-      const selection = select(view.state.doc.toString(), range);
-      if (align === "start") revealAtStart(view, selection);
-      else view.dispatch({ selection, scrollIntoView: true });
+      revealSelection(view, select(view.state.doc.toString(), range), align);
     },
   }), []);
 
@@ -284,12 +308,14 @@ export default function InlineMarkdownEditor(props: Props) {
               }
               if (!mod && !event.shiftKey && !event.altKey && (event.key === "Backspace" || event.key === "Delete")) {
                 const cursor = view.state.selection.main;
+                if (event.key === "Delete" && atClosingCodeFence(view.state)) return true;
                 if (event.key === "Backspace" && cursor.empty) {
                   if (removeEmptyMarkdownMarker(view, event.repeat) || enterPreviousMarkdownBlock(view) || handleCodeBlockBackspace(view, event.repeat)) {
                     const { surface, overlay } = store.getSnapshot();
                     suppressBackspaceRepeat(surface, overlay);
                     return true;
                   }
+                  if (deleteCodeIndent(view)) return true;
                   if (isPairedSymbol(view.state.sliceDoc(Math.max(0, cursor.head - 1), cursor.head))
                     && applyPairedSymbol(view, cursor.from, cursor.to, "Backspace")) return true;
                 }
@@ -302,8 +328,10 @@ export default function InlineMarkdownEditor(props: Props) {
               return false;
             },
             beforeinput(event, view) {
-              return event.inputType === "deleteContentBackward" && event.cancelable && !event.isComposing
-                && !view.compositionStarted && (removeEmptyMarkdownMarker(view) || enterPreviousMarkdownBlock(view) || handleCodeBlockBackspace(view));
+              if (!event.cancelable || event.isComposing || view.compositionStarted) return false;
+              if (event.inputType === "deleteContentForward") return atClosingCodeFence(view.state);
+              return event.inputType === "deleteContentBackward"
+                && (removeEmptyMarkdownMarker(view) || enterPreviousMarkdownBlock(view) || handleCodeBlockBackspace(view) || deleteCodeIndent(view));
             },
             compositionstart(_event, view) {
               compositionStart = view.state;
@@ -360,13 +388,9 @@ export default function InlineMarkdownEditor(props: Props) {
     });
     editor.current = view;
     const initialFocus = latest.current.focusOnMount;
-    if (initialFocus === "start") {
+    if (initialFocus) {
       view.focus();
-      revealAtStart(view, select(value, cursor.current));
-    } else if (initialFocus) {
-      view.focus();
-      const padding = parseFloat(getComputedStyle(view.dom.ownerDocument.documentElement).scrollPaddingTop) || 0;
-      view.dispatch({ effects: EditorView.scrollIntoView(view.state.selection.main.head, { yMargin: padding + 8 }) });
+      revealSelection(view, select(value, cursor.current), initialFocus === "start" ? initialFocus : undefined);
     }
     return () => {
       editor.current = null;

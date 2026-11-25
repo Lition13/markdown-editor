@@ -1,3 +1,4 @@
+.markdown-editor-stage { display: flow-root; }
 .markdown-notes {
   container-type: inline-size;
   container-name: markdown-editor;
@@ -127,8 +128,20 @@
 .cm-md-code-settings {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
   padding-top: 4px;
 }
+.notes-code-action {
+  min-height: 29px;
+  padding-inline: 7px;
+  border-radius: 5px;
+  color: var(--secondary);
+  font-size: var(--font-caption);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.notes-code-action:hover { background: var(--hover); color: var(--text); }
 .notes-code-language-control {
   display: grid;
   grid-template-columns: 23px minmax(0, 1fr) 9px;
@@ -312,9 +325,6 @@
   padding-inline: 4px;
   font-size: var(--font-label);
 }
-.markdown-editor-modal .notes-live-document {
-  padding: 12px 10px 4px;
-}
 .markdown-loading {
   color: var(--muted);
   font-size: 12px;
@@ -377,13 +387,71 @@
   margin-top: 12px;
   line-height: 1.8;
 }
-.modal.markdown-editor-modal {
-  width: 1120px;
-  max-width: calc(100vw - 48px);
-  height: 850px;
-  max-height: calc(100dvh - 48px);
+.markdown-editor-modal[open] {
+  --fullscreen-content-width: 1120px;
+  --fullscreen-padding: clamp(14px, 4vw, 52px);
+  position: fixed;
+  inset: var(--markdown-fullscreen-inset, 0px) 0 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  height: calc(100dvh - var(--markdown-fullscreen-inset, 0px));
+  max-height: none;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
-  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  border: 0;
+}
+.markdown-editor-modal::backdrop { background: transparent; }
+.markdown-fullscreen-header {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
+  align-items: center;
+  min-height: 49px;
+  gap: 8px;
+  padding: 5px clamp(10px, 2vw, 24px);
+  border-bottom: 1px solid var(--border);
+}
+.markdown-fullscreen-header h2 {
+  overflow: hidden;
+  font-size: var(--font-label);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.markdown-fullscreen-modes {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.markdown-fullscreen-header button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  padding-inline: 9px;
+  border-radius: 5px;
+  color: var(--secondary);
+  font-size: var(--font-label);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.markdown-fullscreen-header button:hover { background: var(--hover); }
+.markdown-fullscreen-modes button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.markdown-fullscreen-done {
+  justify-self: end;
+  border: 1px solid var(--border-strong);
 }
 .markdown-editor-modal .markdown-notes {
   flex: 1;
@@ -391,27 +459,35 @@
   flex-direction: column;
   min-height: 0;
   margin: 0;
-  padding: 0 20px;
 }
 .markdown-editor-modal .notes-editor-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 12px;
+}
+.markdown-editor-modal :is(.notes-live-document, .notes-editor-textarea, .notes-edit-error) {
+  width: 100%;
+  max-width: var(--fullscreen-content-width);
+  margin-inline: auto;
+  padding-inline: var(--fullscreen-padding);
+}
+.markdown-editor-modal .notes-live-document {
+  padding-block: 22px 32px;
 }
 .markdown-editor-modal .notes-editor-textarea {
+  field-sizing: content;
   min-height: 100%;
-  height: 100%;
   resize: none;
-  padding: 18px 14px;
-  font-size: 13px;
+  padding-block: 22px 32px;
+  border: 0;
+  border-radius: 0;
+  font-size: var(--font-body);
+  overflow-wrap: anywhere;
 }
-.markdown-editor-modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
+@supports not (field-sizing: content) {
+  .markdown-editor-modal .notes-editor-textarea { height: 100%; }
 }
 .markdown-body {
   color: var(--text);
@@ -840,20 +916,14 @@
   white-space: pre-wrap;
 }
 @media (max-width: 720px) {
-  .modal.markdown-editor-modal {
-    max-width: calc(100vw - 24px);
-    max-height: calc(100dvh - 24px);
-  }
-  .markdown-editor-modal .markdown-notes {
-    padding: 0 12px;
-  }
   .markdown-body {
     font-size: 12px;
   }
   .markdown-body pre {
     font-size: 11px;
   }
-  .markdown-editor-modal-footer {
-    padding: 10px 14px;
-  }
+}
+@media (max-width: 480px) {
+  .markdown-fullscreen-header button { padding-inline: 7px; }
+  .markdown-fullscreen-modes svg { display: none; }
 }

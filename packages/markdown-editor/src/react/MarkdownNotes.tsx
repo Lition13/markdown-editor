@@ -33,6 +33,7 @@ import {
   type RefObject,
 } from "react";
 import EditorDialog from "./EditorDialog";
+import { editorViewport } from "./editorViewport";
 import { resolveMarkdownLink, useMarkdownEnvironment, type MarkdownEditorHandle, type MarkdownMode } from "./editorContext";
 import ActionMenu, { type ActionItem, type MenuPoint } from "./ActionMenu";
 import MarkdownTableSize from "./MarkdownTableSize";
@@ -40,6 +41,7 @@ import { newMarkdownTable, serializeMarkdownTable, type TableSize } from "../cor
 import type { InlineMarkdownHandle, MarkdownKeystroke } from "./InlineMarkdownEditor";
 import { emptyMarkdownMarkerRange, indentListItems } from "../core/markdownList";
 import { readYamlFrontmatter } from "../core/markdownAst";
+import { codeIndentBackspace, codeIndentWidth, codeLineBreak, editableCodeFence } from "../core/markdownCodeEditing";
 import { suppressBackspaceRepeat } from "../core/keyboard";
 import { pairedSymbolAfterInput } from "../core/markdownPairs";
 import { formatMarkdownInline, headingForShortcut, headingShortcuts, isInlineMarkdownFormat, isNativeHistoryShortcut } from "../core/markdownShortcuts";
@@ -77,6 +79,13 @@ function changeIndentation(value: string, range: TextSelection, outdent: boolean
       ? indentLines(value, range, outdent, 2)
       : null;
   }
+  const trailingNewline = range.start < range.end && value[range.end - 1] === "\n" ? 1 : 0;
+  const codeRange = { start: range.start, end: range.end - trailingNewline };
+  const fence = editableCodeFence(value, codeRange);
+  if (fence) {
+    const next = indentLines(value, codeRange, outdent, codeIndentWidth(value, fence), fence.indent.length);
+    return { ...next, end: next.end + trailingNewline };
+  }
   const heading = explicit ? null : changeMarkdownHeading(value, range, outdent ? -1 : 1);
   return heading ?? indentListItems(value, range, outdent)
     ?? (explicit || isInMarkdownLiteralBlock(value, range.start) || isMarkdownIndentContext(value, range)
@@ -84,9 +93,10 @@ function changeIndentation(value: string, range: TextSelection, outdent: boolean
 }
 
 function textareaPoint(field: HTMLTextAreaElement, position: number) {
+  const owner = field.ownerDocument;
   const bounds = field.getBoundingClientRect();
-  const style = getComputedStyle(field);
-  const mirror = document.createElement("div");
+  const style = owner.defaultView!.getComputedStyle(field);
+  const mirror = owner.createElement("div");
   const properties = ["font", "lineHeight", "letterSpacing", "padding", "border", "boxSizing", "tabSize", "overflowWrap", "wordBreak", "textAlign"] as const;
   for (const property of properties) mirror.style[property] = style[property];
   Object.assign(mirror.style, {
@@ -94,32 +104,28 @@ function textareaPoint(field: HTMLTextAreaElement, position: number) {
     left: `${bounds.left - field.scrollLeft}px`, top: `${bounds.top - field.scrollTop}px`,
   });
   mirror.textContent = field.value.slice(0, position);
-  const caret = document.createElement("span");
+  const caret = owner.createElement("span");
   caret.textContent = field.value.slice(position) || "\u200b";
   mirror.append(caret);
-  document.body.append(mirror);
+  owner.body.append(mirror);
   const rect = caret.getClientRects()[0] ?? bounds;
   mirror.remove();
   return { x: rect.left, y: rect.bottom + 5, aboveY: rect.top };
 }
 
 function revealSourceCaret(field: HTMLTextAreaElement, align?: "start") {
-  const viewport = field.ownerDocument.defaultView;
-  if (!viewport) return;
+  const frame = editorViewport(field);
+  if (!frame) return;
   const bounds = field.getBoundingClientRect();
-  if (viewport.getComputedStyle(field).getPropertyValue("field-sizing") !== "content") {
-    if (align === "start" && field.scrollHeight > field.clientHeight) {
-      field.scrollTop += textareaPoint(field, field.selectionEnd).aboveY - bounds.top - 8;
-    }
-    return;
-  }
-  const styles = viewport.getComputedStyle(field.ownerDocument.documentElement);
-  const top = (parseFloat(styles.scrollPaddingTop) || 0) + 8;
-  const bottom = viewport.innerHeight - (parseFloat(styles.scrollPaddingBottom) || 0) - 8;
-  if (!align && bounds.top >= top && bounds.bottom <= bottom) return;
+  const internal = field.scrollHeight > field.clientHeight
+    && frame.viewport.getComputedStyle(field).getPropertyValue("field-sizing") !== "content";
+  const top = internal ? bounds.top + 8 : frame.top;
+  const bottom = internal ? bounds.bottom - 8 : frame.bottom;
+  if (!internal && !align && bounds.top >= top && bounds.bottom <= bottom) return;
   const caret = textareaPoint(field, field.selectionEnd);
-  if (align === "start" || caret.aboveY < top) viewport.scrollBy(0, caret.aboveY - top);
-  else if (caret.y > bottom) viewport.scrollBy(0, caret.y - bottom);
+  const target = internal ? field : frame.scroller ?? frame.viewport;
+  if (align === "start" || caret.aboveY < top) target.scrollBy(0, caret.aboveY - top);
+  else if (caret.y > bottom) target.scrollBy(0, caret.y - bottom);
 }
 
 export default function MarkdownNotes({
@@ -143,6 +149,8 @@ export default function MarkdownNotes({
   const [focusLive, setFocusLive] = useState(false);
   const wasInSourceMode = useRef(false);
   const [expanded, setExpanded] = useState(false);
+  const stage = useRef<HTMLDivElement>(null);
+  const normalHeight = useRef(0);
   const [, refresh] = useState(0);
   const selection = useRef<TextSelection>({ start: 0, end: 0 });
   const current = useRef(normalized);
@@ -197,18 +205,25 @@ export default function MarkdownNotes({
     return snapshot.selection;
   };
   const closeExpanded = () => {
+    last.current = { at: 0, kind: "" };
     setFocusLive(true);
     setExpanded(false);
+  };
+  const openExpanded = () => {
+    normalHeight.current = stage.current?.getBoundingClientRect().height ?? 0;
+    last.current = { at: 0, kind: "" };
+    setExpanded(true);
+  };
+  const changeMode = (next: MarkdownMode) => {
+    if (controlledMode === undefined) setLocalMode(next);
+    onModeChange?.(next);
   };
   const editor = (
     <Editor
       editorRef={editorRef}
       value={normalized}
       mode={mode}
-      onMode={(next) => {
-        if (controlledMode === undefined) setLocalMode(next);
-        onModeChange?.(next);
-      }}
+      onMode={changeMode}
       onMove={() => { last.current = { at: 0, kind: "" }; }}
       commit={commit}
       onUndo={undo}
@@ -217,29 +232,16 @@ export default function MarkdownNotes({
       focusLive={focusLive || wasInSourceMode.current}
       selection={selection}
       expanded={expanded}
-      onExpand={allowExpand ? (expanded ? closeExpanded : () => setExpanded(true)) : undefined}
+      onExpand={allowExpand ? (expanded ? closeExpanded : openExpanded) : undefined}
     />
   );
-  return expanded ? (
+  return (
     <>
-      <EditorDialog
-        title="编辑 Markdown"
-        onClose={closeExpanded}
-        initialFocus=".notes-editor-textarea, .notes-inline-editor .cm-content"
-      >
-        {editor}
-        <div className="markdown-editor-modal-footer">
-          <button
-            className="primary-button small"
-            onClick={closeExpanded}
-          >
-            完成编辑
-          </button>
-        </div>
-      </EditorDialog>
+      <div ref={stage} className="markdown-editor-stage" style={expanded ? { blockSize: normalHeight.current } : undefined}>
+        {!expanded && editor}
+      </div>
+      {expanded && <EditorDialog mode={mode} onMode={changeMode} onClose={closeExpanded}>{editor}</EditorDialog>}
     </>
-  ) : (
-    editor
   );
 }
 function Editor({
@@ -308,7 +310,13 @@ function Editor({
     const local = clampSelection(editor.value, range);
     editor.focus({ preventScroll: true });
     editor.setSelectionRange(local.start, local.end);
-    if (align) revealSourceCaret(editor, align);
+    revealSourceCaret(editor, align);
+  };
+  const sourceSelection = (field: HTMLTextAreaElement) => ({ start: field.selectionStart, end: field.selectionEnd });
+  const range = () => inline.current?.selection() ?? (ref.current ? sourceSelection(ref.current) : selection.current);
+  const toggleFullscreen = () => {
+    selection.current = range();
+    onExpand?.();
   };
   useImperativeHandle(editorRef, () => ({
     focusAt(offset) {
@@ -319,9 +327,10 @@ function Editor({
       focusAt(clampSelection(value, { start: position, end: position }), "start");
       if (!inline.current && !ref.current) setFocusOnLoad(true);
     },
+    openFullscreen() {
+      if (!expanded) toggleFullscreen();
+    },
   }));
-  const sourceSelection = (field: HTMLTextAreaElement) => ({ start: field.selectionStart, end: field.selectionEnd });
-  const range = () => inline.current?.selection() ?? (ref.current ? sourceSelection(ref.current) : selection.current);
   const pointAt = (position: number) => inline.current?.point(position) ?? (ref.current ? textareaPoint(ref.current, position) : undefined);
   const openTools = (bookmark: TextSelection, point: MenuPoint) => {
     if (isInMarkdownLiteralBlock(latest.current, bookmark.start)
@@ -368,7 +377,6 @@ function Editor({
   useLayoutEffect(() => {
     if (mode !== "source") return;
     focusAt(selection.current);
-    if (ref.current) revealSourceCaret(ref.current);
   }, [expanded, mode]);
   const format = (
     kind:
@@ -539,8 +547,7 @@ function Editor({
         selection.current = current;
         onMode(mode === "live" ? "source" : "live");
       } else if (shortcut === "expand") {
-        selection.current = current;
-        onExpand?.();
+        toggleFullscreen();
       } else if (shortcut === "help") {
         showPanel("help");
       } else if (shortcut === "undo" || shortcut === "redo") {
@@ -575,7 +582,16 @@ function Editor({
       }
     }
     if (ref.current && event.key === "Backspace" && !mod && !event.altKey && !event.shiftKey) {
-      const gap = emptyMarkdownMarkerRange(latest.current, range());
+      const value = latest.current;
+      const current = range();
+      const fence = editableCodeFence(value, current);
+      const indent = fence && codeIndentBackspace(value, current, fence);
+      if (indent) {
+        event.preventDefault();
+        edit(replaceSelection(value, indent, ""));
+        return true;
+      }
+      const gap = emptyMarkdownMarkerRange(value, current);
       if (gap) {
         event.preventDefault();
         event.stopPropagation();
@@ -584,11 +600,14 @@ function Editor({
         return true;
       }
     }
-    if (event.key === "Enter" && !event.shiftKey && !mod && !event.altKey) {
+    if (event.key === "Enter" && !mod && !event.altKey) {
       const value = latest.current;
       const current = range();
-      const next = isInMarkdownLiteralBlock(value, current.start) ? null
-        : continueMarkdownHeading(value, current) ?? continueMarkdownLine(value, current);
+      const fence = ref.current && editableCodeFence(value, current);
+      const lineBreak = fence && codeLineBreak(value, current, fence, event.shiftKey);
+      const next = lineBreak ? replaceSelection(value, current, lineBreak.insert, lineBreak.caret, lineBreak.caret)
+        : event.shiftKey || isInMarkdownLiteralBlock(value, current.start) ? null
+          : continueMarkdownHeading(value, current) ?? continueMarkdownLine(value, current);
       if (next) {
         event.preventDefault();
         edit(next);
@@ -653,7 +672,7 @@ function Editor({
     mode === "live"
       ? option("source", "编辑描述源码", <Code size={15} />, () => onMode("source"), "source markdown", keys.source)
       : option("live", "实时编辑描述", <Code size={15} />, () => onMode("live"), "live 正文", keys.source),
-    ...(onExpand && !expanded ? [option("expand", "全屏编辑描述", <Maximize2 size={15} />, onExpand, "fullscreen", keys.expand)] : []),
+    ...(onExpand && !expanded ? [option("expand", "全屏编辑描述", <Maximize2 size={15} />, toggleFullscreen, "fullscreen", keys.expand)] : []),
     option("help", "Markdown 语法帮助", <HelpCircle size={15} />, () => showPanel("help"), "help", keys.help),
   ] : [];
   const textarea = (

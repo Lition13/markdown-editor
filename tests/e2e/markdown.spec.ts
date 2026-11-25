@@ -325,6 +325,66 @@ test("围栏联想代码语言，回车继续输入，语言仅在编辑时可�
   await expect(toolsMenu(page)).toBeVisible();
 });
 
+test("代码块智能换行与缩进，编辑时可复制并继续正文", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await ready(page);
+  const editor = notes(page);
+  const original = "~~~javascript\nfunction run() {\n  if (ready) {}\n}\n~~~\n\n下方正文";
+  const insidePair = original.indexOf("{}") + 1;
+  const split = original.replace("  if (ready) {}", "  if (ready) {\n    \n  }");
+  await editor.fill(original);
+  await select(page, insidePair, insidePair);
+  await editor.press("Enter");
+  await expect(editor).toHaveValue(split);
+  await editor.press("Control+z");
+  await expect(editor).toHaveValue(original);
+  await select(page, insidePair, insidePair);
+  await editor.press("Control+/");
+  await expect(editor).toBeFocused();
+  await editor.press("Enter");
+  await expect.poll(() => caretLine(page)).toBe("    ");
+  await editor.press("Backspace");
+  await expect.poll(() => caretLine(page)).toBe("  ");
+  await editor.press("Tab");
+  await page.keyboard.insertText("return 3;");
+  const edited = split.replace("    \n", "    return 3;\n");
+  await expect.poll(() => saved(page)).toBe(edited);
+  const copy = rendered(page).getByRole("button", { name: "复制代码", exact: true });
+  await copy.click();
+  await expect(copy).toHaveText("已复制");
+  await expect(editor).toBeFocused();
+  const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clipboard.replace(/\r\n/g, "\n")).toBe(edited.slice(edited.indexOf("\n") + 1, edited.lastIndexOf("\n~~~")));
+
+  await editor.press("Control+/");
+  const lastCodePosition = edited.lastIndexOf("}\n~~~") + 1;
+  await select(page, lastCodePosition - 1, lastCodePosition + 1);
+  await editor.press("Tab");
+  await expect(editor).toHaveValue(edited.slice(0, lastCodePosition - 1) + "  " + edited.slice(lastCodePosition - 1));
+  await editor.press("Shift+Tab");
+  await expect(editor).toHaveValue(edited);
+  await select(page, lastCodePosition, lastCodePosition);
+  await editor.press("Control+/");
+  await editor.press("Delete");
+  await expect.poll(() => saved(page)).toBe(edited);
+  await editor.press("ArrowDown");
+  const language = page.getByRole("combobox", { name: "代码块语言" });
+  const below = rendered(page).getByRole("button", { name: "继续正文", exact: true });
+  await expect(language).toBeFocused();
+  await language.press("Shift+Tab");
+  await expect(below).toBeFocused();
+  await below.press("Shift+Tab");
+  await expect(copy).toBeFocused();
+  await copy.press("Enter");
+  await expect(copy).toHaveText("已复制");
+  await copy.press("Tab");
+  await expect(below).toBeFocused();
+  await below.press("Enter");
+  await expect(editor).toBeFocused();
+  await expect.poll(() => caretLine(page)).toBe("下方正文");
+  await expect.poll(() => saved(page)).toBe(edited);
+});
+
 test("代码语言下拉可按别名筛选、用键盘或点击选择，并在窄窗口内展开", async ({ page }) => {
   await ready(page);
   const original = "```javascript\nconst total = 42;\n```";
@@ -1479,13 +1539,61 @@ test("全屏和语法帮助快捷键保留选区，小窗口自动保存", async
   await page.setViewportSize({ width: 760, height: 580 });
   await expect(dialog).toBeVisible();
   const box = await dialog.boundingBox();
-  expect(box!.height).toBeLessThanOrEqual(556);
-  expect(box!.width).toBeLessThanOrEqual(736);
+  expect(box).toEqual({ x: 0, y: 0, width: 760, height: 580 });
   await notes(page).press("Control+Home");
   await page.keyboard.press("Alt+Enter");
   await expect(dialog).toHaveCount(0);
   await expect(notes(page)).toBeFocused();
   await expect.poll(() => saved(page)).toBe("## 实时描述\n\n正在此文");
+});
+
+test("从顶栏进入全屏，长文档切换视图并返回时延续选区、滚动与撤销", async ({ page }) => {
+  await ready(page);
+  const editor = notes(page);
+  const token = "CURRENT-SELECTION";
+  const long = Array.from({ length: 180 }, (_, index) => index === 110 ? token : "同一份文档的段落 " + index).join("\n\n");
+  const start = long.indexOf(token);
+  await editor.fill(long);
+  await select(page, start, start + token.length);
+  await editor.evaluate((field: HTMLTextAreaElement) => {
+    const view = field.ownerDocument.defaultView!;
+    const lines = field.value.slice(0, field.selectionStart).split("\n").length - 1;
+    view.scrollTo(0, field.getBoundingClientRect().top + view.scrollY
+      + lines * parseFloat(view.getComputedStyle(field).lineHeight) - view.innerHeight / 2);
+  });
+  const before = await page.evaluate(() => scrollY);
+  expect(before).toBeGreaterThan(1000);
+  const toolbar = await revealToolbar(page);
+  await toolbar.getByRole("button", { name: "全屏编辑", exact: true }).click();
+
+  const dialog = page.getByRole("dialog", { name: "编辑 Markdown", exact: true });
+  const modes = dialog.getByRole("group", { name: "全屏编辑视图" });
+  const scroll = dialog.locator(".notes-editor-body");
+  await expect(dialog).toBeVisible();
+  expect(await dialog.evaluate(element => element.matches(":modal"))).toBe(true);
+  await expect.poll(() => scroll.evaluate(element => element.scrollTop)).toBeGreaterThan(1000);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBe(before);
+  await expect(editor).toBeFocused();
+  const fullScroll = await scroll.evaluate(element => element.scrollTop);
+  await page.mouse.move(40, 180);
+  await page.mouse.wheel(0, 280);
+  await expect.poll(() => scroll.evaluate(element => element.scrollTop)).toBeGreaterThan(fullScroll);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBe(before);
+  await modes.getByRole("button", { name: "编辑", exact: true }).click();
+  await expect(editor).toBeFocused();
+  await expect.poll(() => page.evaluate(() => getSelection()?.toString())).toBe(token);
+  await expect(editor.getByText(token, { exact: true })).toBeInViewport();
+  await modes.getByRole("button", { name: "源码", exact: true }).click();
+  await expect.poll(() => editor.evaluate((field: HTMLTextAreaElement) => [field.selectionStart, field.selectionEnd]))
+    .toEqual([start, start + token.length]);
+  await page.keyboard.insertText("在全屏内更新");
+  await dialog.getByRole("button", { name: "完成编辑", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue(long.replace(token, "在全屏内更新"));
+  await expect.poll(() => page.evaluate(y => Math.abs(scrollY - y), before)).toBeLessThan(100);
+  await editor.press("Control+z");
+  await expect(editor).toHaveValue(long);
 });
 
 test("本地图片可插入、粘贴及持久化，非法图片和执行内容不生效", async ({

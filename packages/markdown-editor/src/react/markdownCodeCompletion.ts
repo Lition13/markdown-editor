@@ -1,7 +1,7 @@
 import { StateEffect, StateField, type EditorState } from "@codemirror/state";
 import { EditorView, showTooltip, tooltips } from "@codemirror/view";
 import { codeLanguageId, completeCodeFence, suggestCodeLanguages } from "../core/markdownCode";
-import { emptyCodeFenceRemoval } from "../core/markdownFence";
+import { codeBodyEnd, emptyCodeFenceRemoval } from "../core/markdownFence";
 import { codeFenceAt, projection } from "./markdownProjection";
 import { codeLanguageOption } from "./markdownLanguagePicker";
 
@@ -112,7 +112,7 @@ export function handleCodeBlockBackspace(view: EditorView, repeat = false) {
   if (!cursor.empty) return false;
   const fence = codeFenceAt(state, cursor.head);
   if (fence?.closerFrom == null) return false;
-  const bodyEnd = Math.max(fence.bodyFrom, fence.closerFrom - 1);
+  const bodyEnd = codeBodyEnd(fence);
   if (cursor.head < fence.bodyFrom || cursor.head > bodyEnd) return false;
   const changes = emptyCodeFenceRemoval(state.doc.toString(), fence);
   // Backspace at the first code position must not edit the hidden opening fence.

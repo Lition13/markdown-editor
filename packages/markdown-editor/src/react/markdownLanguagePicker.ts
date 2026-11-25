@@ -56,7 +56,7 @@ let nextMenuId = 0;
 export function createCodeLanguagePicker(
   value: string,
   onPreview: (language: string) => void,
-  onFinish: (language: string | null, destination: "code" | "below" | null) => void,
+  onFinish: (language: string | null, destination: "code" | "below" | "toolbar" | null) => void,
   topInset: () => number,
 ) {
   const initial = matchCodeLanguage(value);
@@ -98,7 +98,7 @@ export function createCodeLanguagePicker(
 
   const place = () => {
     const anchor = control.getBoundingClientRect();
-    const scroller = footer.closest(".markdown-editor-modal .markdown-notes");
+    const scroller = footer.closest(".markdown-editor-modal .notes-editor-body");
     const scrollBounds = scroller?.getBoundingClientRect();
     const top = Math.max(8, topInset() + 5);
     const bottom = window.innerHeight - 8;
@@ -123,7 +123,7 @@ export function createCodeLanguagePicker(
     input.setAttribute("aria-expanded", "false");
     input.removeAttribute("aria-activedescendant");
   };
-  const finish = (next: string | null, destination: "code" | "below" | null) => {
+  const finish = (next: string | null, destination: "code" | "below" | "toolbar" | null) => {
     if (finished || !footer.isConnected) return;
     finished = true;
     close();
@@ -196,7 +196,10 @@ export function createCodeLanguagePicker(
     if (listeners) render(input.value);
     else open(input.value);
   });
-  input.addEventListener("blur", () => finish(input.value === initialText ? null : codeLanguageId(input.value), null));
+  input.addEventListener("blur", event => {
+    const inToolbar = event.relatedTarget instanceof Node && footer.contains(event.relatedTarget);
+    finish(input.value === initialText ? null : codeLanguageId(input.value), inToolbar ? "toolbar" : null);
+  });
   input.addEventListener("keydown", event => {
     if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
     const { key } = event;
@@ -225,5 +228,5 @@ export function createCodeLanguagePicker(
     input.focus();
     openOnFocus = true;
   };
-  return { footer, dispose: close, focusForNavigation };
+  return { footer, input, dispose: close, focusForNavigation };
 }

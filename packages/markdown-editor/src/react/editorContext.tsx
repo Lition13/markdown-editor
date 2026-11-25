@@ -7,6 +7,7 @@ export type MarkdownMode = "live" | "source";
 
 export interface MarkdownEditorHandle {
   focusAt(offset: number): void;
+  openFullscreen(): void;
 }
 
 export interface MarkdownOptions {

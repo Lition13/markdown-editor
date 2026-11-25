@@ -1,72 +1,68 @@
-import { X } from "lucide-react";
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { CodeXml, Minimize2, PencilLine } from "lucide-react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useMarkdownEnvironment } from "./editorContext";
+import { MarkdownEnvironment, useMarkdownEnvironment, type MarkdownMode } from "./editorContext";
 
-const focusable = 'button:not(:disabled), input:not(:disabled):not([type="file"]), textarea, select, [tabindex="0"]';
-
-export default function EditorDialog({
-  title,
-  children,
-  onClose,
-  initialFocus,
-}: {
-  title: string;
-  children: ReactNode;
+export default function EditorDialog({ mode, onMode, onClose, children }: {
+  mode: MarkdownMode;
+  onMode: (mode: MarkdownMode) => void;
   onClose: () => void;
-  initialFocus?: string;
+  children: ReactNode;
 }) {
-  const { overlay } = useMarkdownEnvironment();
-  const dialog = useRef<HTMLDivElement>(null);
-  const close = useRef(onClose);
-  close.current = onClose;
+  const environment = useMarkdownEnvironment();
+  const { overlay, topInset } = environment;
+  const dialog = useRef<HTMLDialogElement>(null);
+  const header = useRef<HTMLElement>(null);
+  const [menuLayer, setMenuLayer] = useState<HTMLDivElement | null>(null);
+  const [headerBottom, setHeaderBottom] = useState(topInset);
 
   useLayoutEffect(() => {
     const element = dialog.current;
-    if (!element) return;
-    const owner = element.ownerDocument;
-    const previous = owner.activeElement as HTMLElement | null;
-    const target = (initialFocus && element.querySelector<HTMLElement>(initialFocus))
-      || element.querySelector<HTMLElement>(focusable);
-    target?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing || !element.contains(owner.activeElement)) return;
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        close.current();
-      }
-      if (event.key === "Tab") {
-        const controls = Array.from(element.querySelectorAll<HTMLElement>(focusable))
-          .filter(control => control.getClientRects().length > 0);
-        const first = controls.at(0);
-        const last = controls.at(-1);
-        const atEdge = (event.shiftKey ? first : last) === owner.activeElement;
-        if (atEdge) {
-          event.preventDefault();
-          (event.shiftKey ? last : first)?.focus();
-        }
-      }
-    };
-    owner.addEventListener("keydown", onKey);
+    const bar = header.current;
+    if (!element || !bar) return;
+    element.showModal();
+    const measure = () => setHeaderBottom(bar.getBoundingClientRect().bottom);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
     return () => {
-      owner.removeEventListener("keydown", onKey);
-      previous?.focus({ preventScroll: true });
+      observer.disconnect();
+      element.close();
     };
-  }, [overlay, initialFocus]);
+  }, [overlay]);
+  useLayoutEffect(() => {
+    if (header.current) setHeaderBottom(header.current.getBoundingClientRect().bottom);
+  }, [topInset]);
 
   if (!overlay) return null;
   return createPortal(
-    <div className="modal-backdrop" onMouseDown={event => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
-      <div ref={dialog} className="modal markdown-editor-modal" role="dialog" aria-modal="true" aria-label={title}>
-        <div className="modal-header">
-          <h2>{title}</h2>
-          <button type="button" className="icon-button" aria-label="关闭弹窗" onClick={onClose}><X size={19} /></button>
+    <dialog ref={dialog} className="markdown-editor-modal" aria-label="编辑 Markdown"
+      style={{ "--markdown-fullscreen-inset": Math.max(0, topInset) + "px" } as CSSProperties}
+      onKeyDown={event => {
+        if (event.key === "Escape" && (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)) event.preventDefault();
+      }}
+      onCancel={event => { event.preventDefault(); onClose(); }}>
+      <header ref={header} className="markdown-fullscreen-header">
+        <h2>编辑 Markdown</h2>
+        <div className="markdown-fullscreen-modes" role="group" aria-label="全屏编辑视图">
+          <button type="button" aria-pressed={mode === "live"} onClick={() => onMode("live")}>
+            <PencilLine size={15} aria-hidden="true" />编辑
+          </button>
+          <button type="button" aria-pressed={mode === "source"} onClick={() => onMode("source")}>
+            <CodeXml size={16} aria-hidden="true" />源码
+          </button>
         </div>
-        {children}
-      </div>
-    </div>,
+        <button type="button" className="markdown-fullscreen-done" onClick={onClose}>
+          <Minimize2 size={16} aria-hidden="true" />完成编辑
+        </button>
+      </header>
+      {menuLayer && (
+        <MarkdownEnvironment.Provider value={{ ...environment, overlay: menuLayer, topInset: headerBottom }}>
+          {children}
+        </MarkdownEnvironment.Provider>
+      )}
+      <div ref={setMenuLayer} />
+    </dialog>,
     overlay,
   );
 }

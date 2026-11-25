@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import MarkdownRenderer from "../react/MarkdownRenderer";
 import { defaultEnvironment, MarkdownEnvironment, type MarkdownOptions } from "../react/editorContext";
 import { emptyMarkdownMarkerRange, indentListItems } from "./markdownList";
+import { codeIndentBackspace, codeIndentWidth, codeLineBreak, editableCodeFence } from "./markdownCodeEditing";
 import {
   normalizeMarkdown,
   wrapInline,
@@ -25,6 +26,22 @@ const render = (value: string, normalizeLink?: MarkdownOptions["normalizeLink"])
 const all = (value: string) => ({ start: 0, end: value.length });
 const end = (value: string) => ({ start: value.length, end: value.length });
 describe("Markdown 描述编辑", () => {
+  it("代码续行沿用制表符或空格，注释与纯文本保持原缩进", () => {
+    const python = "~~~python\nif enabled:\n\tprepare()\n~~~";
+    const atColon = end(python.slice(0, python.indexOf(":") + 1));
+    const fence = editableCodeFence(python, atColon)!;
+    expect(codeIndentWidth(python, fence)).toBe("\t");
+    expect(codeLineBreak(python, atColon, fence)).toEqual({ insert: "\n\t", caret: 2 });
+    expect(codeLineBreak(python, atColon, fence, true)).toEqual({ insert: "\n", caret: 1 });
+    const afterTab = end(python.slice(0, python.indexOf("prepare")));
+    expect(codeIndentBackspace(python, afterTab, fence)).toEqual({ start: afterTab.start - 1, end: afterTab.end });
+
+    for (const [language, line] of [["js", "  // {"], ["text", "  项目["]]) {
+      const source = "~~~" + language + "\n" + line + "\n~~~";
+      const range = end(source.slice(0, source.lastIndexOf("\n")));
+      expect(codeLineBreak(source, range, editableCodeFence(source, range)!)).toEqual({ insert: "\n  ", caret: 3 });
+    }
+  });
   it("只读预览从正文开始，后续分隔线仍按 Markdown 渲染", () => {
     const preview = render("---\nname: my-skill\n# 文件头注释\n---\n\n# 正文\n\n---\n\n完成。");
     expect(preview).toContain(">正文</h1>");
