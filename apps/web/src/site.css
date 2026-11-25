@@ -76,7 +76,7 @@ button, input { font: inherit; }
   color: var(--accent);
   background: var(--soft-accent);
 }
-.file-actions, .view-options { display: flex; align-items: center; gap: 6px; }
+.header-actions, .view-options { display: flex; align-items: center; gap: 6px; }
 .button, .icon-control, .view-options button {
   min-height: 36px;
   display: inline-flex;
@@ -98,7 +98,7 @@ button, input { font: inherit; }
 .button:hover, .icon-control:hover { background: var(--panel-soft); }
 .button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 .button.primary:hover { background: var(--accent-hover); }
-.button:disabled { opacity: .5; cursor: wait; }
+.button:disabled { opacity: .5; cursor: not-allowed; }
 .icon-control { width: 36px; padding: 0; color: var(--muted); }
 .workspace {
   width: min(1080px, calc(100% - 48px));
@@ -169,8 +169,15 @@ button, input { font: inherit; }
   overflow-wrap: anywhere;
 }
 .workspace-body .notes-editor-body > .notes-editor-textarea:focus { background: transparent; }
-.waiting { color: var(--muted); }
-.file-error { margin: 12px 18px 0; color: var(--error); font-size: .875rem; }
+.workspace-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--muted);
+}
+.workspace-empty h2 { margin: 0; color: var(--text); font-size: 1.1rem; font-weight: 600; }
 .workspace-footer {
   display: flex;
   align-items: center;
@@ -192,6 +199,146 @@ button, input { font: inherit; }
   text-align: center;
 }
 
+body:has(.file-manager[open]) { overflow: hidden; }
+.file-manager {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: min(380px, calc(100% - 16px));
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-inline-end: 1px solid var(--edge);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 10px 0 42px #08112038;
+}
+.file-manager[open] { display: flex; flex-direction: column; overflow: auto; overscroll-behavior: contain; }
+.file-manager::backdrop { background: #101a3278; }
+.file-manager-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 14px 20px;
+  border-bottom: 1px solid var(--edge);
+}
+.file-manager-heading h2 { margin: 0; font-size: 1.1rem; font-weight: 680; }
+.library-controls { display: grid; gap: 12px; padding: 15px 16px 10px; }
+.library-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.library-tools .button { min-height: 38px; }
+.file-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: var(--muted);
+}
+.file-search:focus-within { border-color: var(--accent); }
+.file-search svg { flex: none; }
+.file-search input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: .9rem;
+}
+.file-search input::placeholder { color: var(--muted); }
+.file-action {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  font-size: .875rem;
+}
+.file-action p { margin: 0; overflow-wrap: anywhere; }
+.file-action input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+}
+.file-action input:focus { outline: 1px solid var(--accent); }
+.file-action-buttons { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.button.danger { color: var(--error); }
+.button.danger:hover { border-color: var(--error); }
+.library-error { margin: 2px 0 0; color: var(--error); font-size: .875rem; }
+.library-files {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 3px 12px 10px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+.library-files li {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 46px;
+  margin-bottom: 3px;
+  padding-right: 5px;
+  border-radius: 8px;
+}
+.library-files li:hover { background: var(--panel-soft); }
+.library-files li.is-current {
+  background: var(--soft-accent);
+  box-shadow: inset 2px 0 var(--accent);
+}
+.file-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0 5px 0 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: .9rem;
+  cursor: pointer;
+}
+.file-open svg { flex: none; color: var(--muted); }
+.is-current .file-open svg { color: var(--accent); }
+.is-current .file-list-name { font-weight: 620; }
+.file-list-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-unsaved { flex: none; color: var(--error); font-size: .75rem; }
+.file-row-tool { flex: none; width: 33px; min-height: 34px; }
+.file-row-tool.remove-file:hover { color: var(--error); }
+.file-manager :disabled { cursor: not-allowed; }
+.library-empty {
+  flex: 1;
+  margin: 0;
+  padding: 22px 20px;
+  color: var(--muted);
+  font-size: .9rem;
+}
+.library-footer {
+  padding: 13px 18px;
+  border-top: 1px solid var(--edge);
+  color: var(--muted);
+  font-size: .8125rem;
+}
+
 @media (max-width: 650px) {
   :root {
     --app-header-row-height: 60px;
@@ -202,9 +349,9 @@ button, input { font: inherit; }
   .brand { font-size: .91rem; gap: 6px; }
   .brand-icon { width: 29px; height: 29px; }
   .brand-icon svg { width: 17px; }
-  .file-actions { gap: 4px; }
-  .file-actions .button { min-height: 34px; padding: 0 8px; font-size: .81rem; }
-  .file-actions .button svg { display: none; }
+  .header-actions { gap: 4px; }
+  .header-actions .button { min-height: 34px; padding: 0 8px; font-size: .81rem; }
+  .header-actions .button svg { width: 15px; }
   .icon-control { min-height: 34px; width: 29px; }
   .github { display: none; }
   .workspace { margin: 14px auto 22px; }

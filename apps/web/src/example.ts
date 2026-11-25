@@ -1,6 +1,4 @@
-import type { Draft } from "./drafts";
-
-export const example: Draft = {
+export const example = {
   name: "入门示例.md",
   value: [
     "# 开始写作",
@@ -8,7 +6,7 @@ export const example: Draft = {
     "点击正文任意位置开始编辑。输入 `/` 可以搜索格式、插入表格或切换到源码。",
     "",
     "- [ ] 试试勾选待办",
-    "- [ ] 打开自己的 Markdown 文件",
+    "- [ ] 导入自己的 Markdown 文件",
     "",
     "| 操作 | 快捷键 |",
     "| :--- | :--- |",
@@ -24,8 +22,8 @@ export const example: Draft = {
     "",
     "```mermaid",
     "flowchart LR",
-    "  A[打开 Markdown] --> B[编辑正文]",
-    "  B --> C[下载文件]",
+    "  A[导入 Markdown] --> B[编辑正文]",
+    "  B --> C[导出文件]",
     "```",
     "",
   ].join("\n"),

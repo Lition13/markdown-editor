@@ -1,10 +1,10 @@
 import { MarkdownEditor, type MarkdownMode, type MarkdownTheme } from "@lition13/markdown-editor";
-import { CodeXml, Download, FileText, FolderOpen, Github, Moon, PencilLine, Sun } from "lucide-react";
-import { StrictMode, useEffect, useRef, useState } from "react";
+import { CodeXml, FileText, FolderOpen, Github, Moon, PencilLine, Sun } from "lucide-react";
+import { StrictMode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@lition13/markdown-editor/style.css";
-import { readDraft, writeDraft, type Draft } from "./drafts";
-import { example } from "./example";
+import FileManager from "./FileManager";
+import { useFileLibrary } from "./useFileLibrary";
 import "./site.css";
 
 const themeKey = "lition13-markdown-editor-theme";
@@ -20,73 +20,67 @@ function readTheme(): MarkdownTheme {
   return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-function downloadDraft(draft: Draft) {
-  const url = URL.createObjectURL(new Blob([draft.value], { type: "text/markdown;charset=utf-8" }));
-  const link = document.createElement("a");
-  const name = draft.name.replace(/\.(?:md|markdown|txt)$/i, "") || "未命名";
-  link.href = url;
-  link.download = name + ".md";
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+function Workspace({ library, theme, showFiles }: {
+  library: ReturnType<typeof useFileLibrary>;
+  theme: MarkdownTheme;
+  showFiles: () => void;
+}) {
+  const [mode, setMode] = useState<MarkdownMode>("live");
+  const { current, ready, status, change } = library;
+  useLayoutEffect(() => { window.scrollTo(0, 0); }, []);
+
+  return (
+    <main className="workspace" aria-busy={!ready || undefined}>
+      {current && (
+        <>
+          <div className="workspace-header">
+            <div className="document-name">
+              <FileText size={17} aria-hidden="true" /><span title={current.name}>{current.name}</span>
+            </div>
+            <div className="view-options" role="group" aria-label="文档视图">
+              <button type="button" aria-pressed={mode === "live"} onClick={() => setMode("live")}><PencilLine size={15} aria-hidden="true" />编辑</button>
+              <button type="button" aria-pressed={mode === "source"} onClick={() => setMode("source")}><CodeXml size={16} aria-hidden="true" />源码</button>
+            </div>
+          </div>
+          <div className="workspace-body">
+            <MarkdownEditor
+              theme={theme}
+              mode={mode}
+              onModeChange={setMode}
+              value={current.value}
+              onChange={value => change(current.id, value)}
+            />
+          </div>
+        </>
+      )}
+      {ready && !current && (
+        <div className="workspace-body workspace-empty">
+          <FileText size={30} aria-hidden="true" />
+          <h2>暂无 Markdown 文件</h2>
+          <button type="button" className="button primary" onClick={showFiles}>新建或导入</button>
+        </div>
+      )}
+      <footer className="workspace-footer">
+        <span role="status" className="save-status">{status}</span>
+        {current && <span className="keyboard-hint"><kbd>/</kbd> 打开编辑工具</span>}
+      </footer>
+    </main>
+  );
 }
 
 function App() {
-  const [draft, setDraft] = useState(example);
-  const [documentKey, setDocumentKey] = useState(0);
-  const [ready, setReady] = useState(false);
-  const [opening, setOpening] = useState(false);
-  const [mode, setMode] = useState<MarkdownMode>("live");
+  const library = useFileLibrary();
   const [theme, setTheme] = useState(readTheme);
-  const [status, setStatus] = useState("正在读取草稿");
-  const [error, setError] = useState("");
-  const filePicker = useRef<HTMLInputElement>(null);
-  const latestWrite = useRef(0);
-
-  useEffect(() => {
-    let active = true;
-    void readDraft().then(existing => {
-      if (!active) return;
-      if (existing) setDraft(existing);
-      setStatus(existing ? "草稿已恢复" : "示例文档");
-    }).catch(() => {
-      if (active) setStatus("草稿不可用，可下载文件");
-    }).finally(() => {
-      if (active) setReady(true);
-    });
-    return () => { active = false; };
-  }, []);
+  const fileManager = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     try { localStorage.setItem(themeKey, theme); } catch {}
   }, [theme]);
 
-  function updateDraft(next: Draft) {
-    setDraft(next);
-    setStatus("正在保存草稿");
-    const revision = ++latestWrite.current;
-    void writeDraft(next).then(() => {
-      if (revision === latestWrite.current) setStatus("草稿已保存");
-    }).catch(() => {
-      if (revision === latestWrite.current) setStatus("草稿保存失败，可下载文件");
-    });
-  }
-
-  async function openFile(file: File) {
-    setOpening(true);
-    setError("");
-    try {
-      const value = await file.text();
-      updateDraft({ name: file.name, value });
-      setDocumentKey(key => key + 1);
-      setMode("live");
-    } catch {
-      setError("文件读取失败，请重新选择。");
-    } finally {
-      setOpening(false);
-    }
+  function showFiles() {
+    const dialog = fileManager.current;
+    if (dialog && !dialog.open) dialog.showModal();
   }
 
   return (
@@ -97,26 +91,10 @@ function App() {
             <span className="brand-icon"><FileText size={21} strokeWidth={1.8} /></span>
             <span>Markdown 编辑器</span>
           </h1>
-          <div className="file-actions">
-            <input
-              type="file"
-              ref={filePicker}
-              hidden
-              aria-label="选择 Markdown 文件"
-              accept=".md,.markdown,.txt,text/markdown,text/plain"
-              onChange={event => {
-                const file = event.currentTarget.files?.[0];
-                event.currentTarget.value = "";
-                if (file) void openFile(file);
-              }}
-            />
-            <button type="button" className="button" disabled={!ready || opening} onClick={() => filePicker.current?.click()}>
-              <FolderOpen size={17} />
-              <span>{opening ? "正在打开" : "打开文件"}</span>
-            </button>
-            <button type="button" className="button primary" disabled={!ready} onClick={() => downloadDraft(draft)}>
-              <Download size={17} />
-              <span>下载 .md</span>
+          <div className="header-actions">
+            <button type="button" className="button" aria-haspopup="dialog" aria-controls="file-manager"
+              disabled={!library.ready} onClick={showFiles}>
+              <FolderOpen size={17} aria-hidden="true" />文件管理
             </button>
             <button
               type="button"
@@ -133,32 +111,8 @@ function App() {
           </div>
         </div>
       </header>
-      <main className="workspace">
-        <div className="workspace-header">
-          <div className="document-name"><FileText size={17} aria-hidden="true" /><span>{draft.name}</span></div>
-          <div className="view-options" role="group" aria-label="文档视图">
-            <button type="button" aria-pressed={mode === "live"} disabled={!ready} onClick={() => setMode("live")}><PencilLine size={15} />编辑</button>
-            <button type="button" aria-pressed={mode === "source"} disabled={!ready} onClick={() => setMode("source")}><CodeXml size={16} />源码</button>
-          </div>
-        </div>
-        {error && <p className="file-error" role="alert">{error}</p>}
-        {ready ? (
-          <div className="workspace-body">
-            <MarkdownEditor
-              key={documentKey}
-              theme={theme}
-              mode={mode}
-              onModeChange={setMode}
-              value={draft.value}
-              onChange={value => updateDraft({ ...draft, value })}
-            />
-          </div>
-        ) : <div className="workspace-body waiting">正在读取草稿…</div>}
-        <footer className="workspace-footer">
-          <span role="status" className="save-status">{status}</span>
-          <span className="keyboard-hint"><kbd>/</kbd> 打开编辑工具</span>
-        </footer>
-      </main>
+      <Workspace key={library.current?.id ?? "workspace"} library={library} theme={theme} showFiles={showFiles} />
+      <FileManager dialog={fileManager} library={library} />
     </>
   );
 }

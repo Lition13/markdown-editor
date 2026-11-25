@@ -2,7 +2,9 @@
 
 [在线使用](https://lition13.github.io/markdown-editor/) · [组件安装包](https://github.com/Lition13/markdown-editor/releases)
 
-在浏览器打开本地 Markdown 文件，直接编辑正文，点「源码」或按 Ctrl+/ 切换到 Markdown 源文。网页在当前浏览器保存一个草稿，下载时导出 Markdown 源文。
+直接编辑正文，点「源码」或按 Ctrl+/ 切换到 Markdown 源文。通过「文件管理」新建、批量导入、搜索、切换、重命名和删除文件，用「导出」将当前文件保存为 Markdown。
+
+文件保存在当前浏览器。旧版已保存的草稿会自动迁入文件列表，导入同名文件时会自动加编号。
 
 - 实时正文、源码切换、斜杠菜单、快捷键和撤销重做
 - 可编辑表格、多级列表、待办、代码高亮、脚注和文档内链接
@@ -58,7 +60,7 @@ npm ci
 npm run dev
 ```
 
-在线版位于 `apps/web`，通过 `@lition13/markdown-editor` 的公开入口使用 `packages/markdown-editor`。草稿保存在 IndexedDB。文件打开和保存由网页处理。
+在线版位于 `apps/web`，通过 `@lition13/markdown-editor` 的公开入口使用 `packages/markdown-editor`。文件列表和内容保存在 IndexedDB。文件读写、搜索和导出由网页处理。
 
 ```sh
 npm run typecheck
