@@ -272,6 +272,7 @@ test("工作台铺满窗口，顶栏悬浮，字词和行数实时更新并记�
   await expect.poll(() => page.locator(".workbench").evaluate(shell => {
     return Math.round(shell.getBoundingClientRect().width) === document.documentElement.clientWidth;
   })).toBe(true);
+  await page.mouse.move(550, 180);
   await handle.hover();
   await expect(toolbar).toBeVisible();
   await page.mouse.move(550, 180);

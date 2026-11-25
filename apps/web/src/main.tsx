@@ -1,6 +1,6 @@
 import { inspectMarkdown, MarkdownEditor, type MarkdownEditorHandle, type MarkdownMode, type MarkdownOutlineItem, type MarkdownTheme } from "@lition13/markdown-editor";
 import { CodeXml, FileText, FolderOpen, Github, ListTree, Moon, PanelBottom, PencilLine, Sun, X } from "lucide-react";
-import { StrictMode, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { StrictMode, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "@lition13/markdown-editor/style.css";
 import FileManager from "./FileManager";
@@ -46,9 +46,14 @@ function Toolbar({ children }: { children: ReactNode }) {
   const handle = useRef<HTMLButtonElement>(null);
   const visible = hovered || held || keyboard;
 
+  function revealFromPointer(event: PointerEvent<HTMLElement>) {
+    if (!hovered && event.pointerType !== "touch") setHovered(true);
+  }
+
   return (
     <header className="app-header" data-visible={visible}
-      onPointerEnter={event => { if (event.pointerType !== "touch") setHovered(true); }}
+      onPointerEnter={revealFromPointer}
+      onPointerMove={revealFromPointer}
       onPointerLeave={() => setHovered(false)}
       onPointerDownCapture={() => setKeyboard(false)}
       onFocusCapture={event => {
