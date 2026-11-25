@@ -1,7 +1,8 @@
 import { ChevronRight, Download, FileText, Folder, FolderOpen, FolderPlus, FolderTree, PencilLine, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import SidePanel from "./SidePanel";
-import { markdownName, type FileEntry, type FolderEntry, type MarkdownFile } from "./files";
+import { FileLibraryError, markdownName, type FileEntry, type FolderEntry, type MarkdownFile } from "./files";
+import { useWebText, type WebMessage } from "./locale";
 import type { useFileLibrary } from "./useFileLibrary";
 import { useLibraryDrag } from "./useLibraryDrag";
 
@@ -23,11 +24,11 @@ function readExpandedFolders() {
   return null;
 }
 
-function exportFile(file: MarkdownFile, panel: HTMLElement) {
+function exportFile(file: MarkdownFile, panel: HTMLElement, fallbackName: string) {
   const url = URL.createObjectURL(new Blob([file.value], { type: "text/markdown;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;
-  const stem = file.name.replace(/\.(?:md|markdown|txt)$/i, "") || "未命名";
+  const stem = file.name.replace(/\.(?:md|markdown|txt)$/i, "") || fallbackName;
   link.download = stem + ".md";
   panel.append(link);
   link.click();
@@ -62,12 +63,13 @@ export default function FileManager({ library, open, compact, onClose }: {
   compact: boolean;
   onClose: () => void;
 }) {
+  const t = useWebText();
   const [query, setQuery] = useState("");
   const [action, setAction] = useState<FileAction | null>(null);
   const [name, setName] = useState("");
   const [folderId, setFolderId] = useState<string | null>();
   const [openFolders, setOpenFolders] = useState(readExpandedFolders);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<WebMessage | "">("");
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -101,7 +103,7 @@ export default function FileManager({ library, open, compact, onClose }: {
   });
   const picked = movement.selection;
   const destinations = picked ? [
-    { id: null, name: "文件库" },
+    { id: null, name: t("文件库") },
     ...folders.map(folder => ({
       id: folder.id,
       name: folderPath(foldersById, folder.id).map(part => part.name).join(" / "),
@@ -138,8 +140,8 @@ export default function FileManager({ library, open, compact, onClose }: {
     setError("");
     if (next.type === "rename") setName(next.file.name);
     if (next.type === "rename-folder") setName(next.folder.name);
-    if (next.type === "new") setName("未命名.md");
-    if (next.type === "new-folder") setName("新建文件夹");
+    if (next.type === "new") setName(t("未命名.md"));
+    if (next.type === "new-folder") setName(t("新建文件夹"));
     setAction(next);
   }
 
@@ -195,8 +197,7 @@ export default function FileManager({ library, open, compact, onClose }: {
         if (compact) onClose();
       } else if (action) dismissAction();
     } catch (error) {
-      setError(error instanceof Error && !(error instanceof DOMException)
-        ? error.message : "无法读取或保存文件，请重试。");
+      setError(error instanceof FileLibraryError ? error.label : "无法读取或保存文件，请重试。");
     } finally {
       locked.current = false;
       setBusy(false);
@@ -205,7 +206,7 @@ export default function FileManager({ library, open, compact, onClose }: {
 
   const deleting = action?.type === "delete" || action?.type === "delete-folder";
   const creating = action?.type === "new" || action?.type === "new-folder";
-  const placementTitle = "存放到 " + (placement || "文件库");
+  const placementTitle = t("存放到 {name}", { name: placement || t("文件库") });
 
   function renderFile(file: FileEntry) {
     const parentId = file.folderId ?? null;
@@ -230,13 +231,13 @@ export default function FileManager({ library, open, compact, onClose }: {
                 <small>{folderPath(foldersById, parentId).map(folder => folder.name).join(" / ")}</small>
               )}
             </span>
-            {unsavedIds.includes(file.id) && <span className="file-unsaved">未保存</span>}
+            {unsavedIds.includes(file.id) && <span className="file-unsaved">{t("未保存")}</span>}
           </button>
-          <button type="button" className="icon-control file-row-tool" title="重命名" aria-label={"重命名 " + file.name}
+          <button type="button" className="icon-control file-row-tool" title={t("重命名")} aria-label={t("重命名 {name}", { name: file.name })}
             disabled={busy} onClick={event => begin({ type: "rename", file }, event.currentTarget)}>
             <PencilLine size={16} aria-hidden="true" />
           </button>
-          <button type="button" className="icon-control file-row-tool remove-file" title="删除" aria-label={"删除 " + file.name}
+          <button type="button" className="icon-control file-row-tool remove-file" title={t("删除")} aria-label={t("删除 {name}", { name: file.name })}
             disabled={busy} onClick={event => begin({ type: "delete", file }, event.currentTarget)}>
             <Trash2 size={16} aria-hidden="true" />
           </button>
@@ -260,11 +261,11 @@ export default function FileManager({ library, open, compact, onClose }: {
             <span className="file-kind-icon" aria-hidden="true"><FolderIcon size={16} /></span>
             <span className="file-list-name">{folder.name}</span>
           </button>
-          <button type="button" className="icon-control file-row-tool" aria-label={"重命名文件夹 " + folder.name} title="重命名文件夹"
+          <button type="button" className="icon-control file-row-tool" aria-label={t("重命名文件夹 {name}", { name: folder.name })} title={t("重命名文件夹")}
             disabled={busy} onClick={event => begin({ type: "rename-folder", folder }, event.currentTarget)}>
             <PencilLine size={15} aria-hidden="true" />
           </button>
-          <button type="button" className="icon-control file-row-tool remove-file" aria-label={"删除文件夹 " + folder.name} title="删除文件夹"
+          <button type="button" className="icon-control file-row-tool remove-file" aria-label={t("删除文件夹 {name}", { name: folder.name })} title={t("删除文件夹")}
             disabled={busy} onClick={event => begin({ type: "delete-folder", folder }, event.currentTarget)}>
             <Trash2 size={15} aria-hidden="true" />
           </button>
@@ -279,25 +280,25 @@ export default function FileManager({ library, open, compact, onClose }: {
   function renderBranch(id: string | null, depth: number): ReactNode {
     const directories = childFolders.get(id) ?? [];
     const documents = childFiles.get(id) ?? [];
-    if (!directories.length && !documents.length) return <li className="library-branch-empty">空文件夹</li>;
+    if (!directories.length && !documents.length) return <li className="library-branch-empty">{t("空文件夹")}</li>;
     return <>{directories.map(folder => renderFolder(folder, depth))}{documents.map(renderFile)}</>;
   }
 
   return (
-    <SidePanel id="file-manager" title="文件管理" className="file-manager" open={open} compact={compact} onDismiss={dismissPanel}>
+    <SidePanel id="file-manager" title={t("文件管理")} className="file-manager" open={open} compact={compact} onDismiss={dismissPanel}>
       <div className="file-manager-heading">
-        <h2 id="file-manager-title">文件管理</h2>
-        <button className="icon-control" type="button" aria-label="关闭文件管理" disabled={busy} onClick={onClose}>
+        <h2 id="file-manager-title">{t("文件管理")}</h2>
+        <button className="icon-control" type="button" aria-label={t("关闭文件管理")} disabled={busy} onClick={onClose}>
           <X size={19} aria-hidden="true" />
         </button>
       </div>
       <div className="library-controls" aria-busy={busy || undefined}>
         <div className="library-tools">
           <button type="button" className="button primary" title={placementTitle} disabled={busy || !ready} onClick={event => begin({ type: "new" }, event.currentTarget)}>
-            <Plus size={16} aria-hidden="true" />新建
+            <Plus size={16} aria-hidden="true" />{t("新建")}
           </button>
           <button type="button" className="button" title={placementTitle} disabled={busy || !ready} onClick={event => begin({ type: "new-folder" }, event.currentTarget)}>
-            <FolderPlus size={16} aria-hidden="true" />新建文件夹
+            <FolderPlus size={16} aria-hidden="true" />{t("新建文件夹")}
           </button>
           <button type="button" className="button" title={placementTitle} disabled={busy || !ready} onClick={() => {
             movement.reset();
@@ -305,21 +306,21 @@ export default function FileManager({ library, open, compact, onClose }: {
             setError("");
             fileInput.current?.click();
           }}>
-            <Upload size={16} aria-hidden="true" />导入
+            <Upload size={16} aria-hidden="true" />{t("导入")}
           </button>
-          <button type="button" className="button" title="导出当前文件为 .md" disabled={!current || busy}
+          <button type="button" className="button" title={t("导出当前文件为 .md")} disabled={!current || busy}
             onClick={event => {
               const panel = event.currentTarget.closest<HTMLElement>(".file-manager");
-              if (current && panel) exportFile(current, panel);
+              if (current && panel) exportFile(current, panel, t("未命名"));
             }}>
-            <Download size={16} aria-hidden="true" />导出
+            <Download size={16} aria-hidden="true" />{t("导出")}
           </button>
           <input
             ref={fileInput}
             type="file"
             hidden
             multiple
-            aria-label="选择 Markdown 文件"
+            aria-label={t("选择 Markdown 文件")}
             accept=".md,.markdown,.txt,text/markdown,text/plain"
             onChange={event => {
               const selected = Array.from(event.currentTarget.files ?? []);
@@ -339,22 +340,22 @@ export default function FileManager({ library, open, compact, onClose }: {
         </div>
         <label className="file-search">
           <Search size={17} aria-hidden="true" />
-          <input ref={search} type="search" placeholder="搜索文件名" aria-label="搜索文件名"
+          <input ref={search} type="search" placeholder={t("搜索文件名")} aria-label={t("搜索文件名")}
             value={query} onChange={event => setQuery(event.currentTarget.value)} />
         </label>
         <div className="library-location">
-          <button type="button" className="library-root" disabled={busy || !ready} title="选择文件库根目录"
+          <button type="button" className="library-root" disabled={busy || !ready} title={t("选择文件库根目录")}
             aria-current={currentFolder === null ? "location" : undefined} {...movement.targetProps(null)} onClick={() => selectFolder(null)}>
-            <FolderTree size={15} aria-hidden="true" />文件库
+            <FolderTree size={15} aria-hidden="true" />{t("文件库")}
           </button>
           {placement && <span className="library-placement" title={placementTitle} aria-live="polite">{placementTitle}</span>}
         </div>
         {deleting ? (
           <div className="file-action">
-            {action.type === "delete" ? <p>删除「{action.file.name}」？</p>
-              : <p>删除「{action.folder.name}」？其中的文件和子文件夹会移到上一级。</p>}
+            {action.type === "delete" ? <p>{t("删除「{name}」？", { name: action.file.name })}</p>
+              : <p>{t("删除「{name}」？其中的文件和子文件夹会移到上一级。", { name: action.folder.name })}</p>}
             <div className="file-action-buttons">
-              <button type="button" className="button" ref={cancelButton} disabled={busy} onClick={dismissAction}>取消</button>
+              <button type="button" className="button" ref={cancelButton} disabled={busy} onClick={dismissAction}>{t("取消")}</button>
               <button type="button" className="button danger" disabled={busy}
                 onClick={() => {
                   void run(async () => {
@@ -370,7 +371,7 @@ export default function FileManager({ library, open, compact, onClose }: {
                       });
                     }
                   });
-                }}>确认删除</button>
+                }}>{t("确认删除")}</button>
             </div>
           </div>
         ) : action && (
@@ -390,49 +391,49 @@ export default function FileManager({ library, open, compact, onClose }: {
             }, action.type === "new");
           }}>
             <label htmlFor="library-file-name">{
-              action.type === "new" ? "新建文件名" : action.type === "new-folder" ? "文件夹名称"
-                : action.type === "rename-folder" ? "新文件夹名称" : "新文件名"
+              action.type === "new" ? t("新建文件名") : action.type === "new-folder" ? t("文件夹名称")
+                : action.type === "rename-folder" ? t("新文件夹名称") : t("新文件名")
             }</label>
             <input id="library-file-name" type="text" ref={nameInput} value={name} required
               onChange={event => setName(event.currentTarget.value)} />
             <div className="file-action-buttons">
-              <button type="button" className="button" disabled={busy} onClick={dismissAction}>取消</button>
-              <button type="submit" className="button primary" disabled={busy}>{creating ? "创建" : "保存"}</button>
+              <button type="button" className="button" disabled={busy} onClick={dismissAction}>{t("取消")}</button>
+              <button type="submit" className="button primary" disabled={busy}>{creating ? t("创建") : t("保存")}</button>
             </div>
           </form>
         )}
-        {error && <p className="library-error" role="alert">{error}</p>}
+        {error && <p className="library-error" role="alert">{t(error)}</p>}
       </div>
       {(searchTerm ? matches.length > 0 : childFolders.has(null) || childFiles.has(null)) ? (
-        <ul className="library-files" aria-label={searchTerm ? "文件搜索结果" : "文件和文件夹"} data-file-scroll="">
+        <ul className="library-files" aria-label={searchTerm ? t("文件搜索结果") : t("文件和文件夹")} data-file-scroll="">
           {searchTerm ? matches.map(renderFile) : renderBranch(null, 0)}
         </ul>
       ) : (
         <p className="library-empty">
-          {!ready ? "正在读取文件…" : searchTerm ? "没有匹配的文件" : "还没有文件。可新建一篇或导入 Markdown 文件。"}
+          {!ready ? t("正在读取文件…") : searchTerm ? t("没有匹配的文件") : t("还没有文件。可新建一篇或导入 Markdown 文件。")}
         </p>
       )}
       {picked && (
-        <section className="library-destinations" ref={movement.destinations} aria-label="放到文件夹">
-          <p className="destination-heading" role="status">放到文件夹 <span title={picked.entry.name}>{picked.entry.name}</span></p>
+        <section className="library-destinations" ref={movement.destinations} aria-label={t("放到文件夹")}>
+          <p className="destination-heading" role="status">{t("放到文件夹")} <span title={picked.entry.name}>{picked.entry.name}</span></p>
           {destinations.length ? (
             <ul data-file-scroll="">
               {destinations.map(folder => (
                 <li key={folder.id ?? "root"}>
                   {picked.method === "keyboard" ? (
-                    <button type="button" aria-label={"放到 " + folder.name}
+                    <button type="button" aria-label={t("放到 {name}", { name: folder.name })}
                       onClick={() => movement.choose(folder.id)} title={folder.name}>
                       <Folder size={15} aria-hidden="true" /><span>{folder.name}</span>
                     </button>
                   ) : (
-                    <div {...movement.targetProps(folder.id)} aria-label={"放到 " + folder.name} title={folder.name}>
+                    <div {...movement.targetProps(folder.id)} aria-label={t("放到 {name}", { name: folder.name })} title={folder.name}>
                       <Folder size={15} aria-hidden="true" /><span>{folder.name}</span>
                     </div>
                   )}
                 </li>
               ))}
             </ul>
-          ) : <p className="destination-empty">暂无可放置的文件夹</p>}
+          ) : <p className="destination-empty">{t("暂无可放置的文件夹")}</p>}
         </section>
       )}
     </SidePanel>

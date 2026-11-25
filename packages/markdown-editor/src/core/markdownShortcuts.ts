@@ -1,4 +1,5 @@
 import { wrapInline, wrapInlineCode, type TextSelection } from "./markdown";
+import { markdownTranslator, type MarkdownLocale } from "./locale";
 import { keyIssue, markdownShortcutFromEvent, normalizeMarkdownShortcut, shortcutSequenceStart, type MarkdownShortcutIssue, type ShortcutEvent } from "./shortcutKeys";
 
 type ShortcutScope = "live" | "source" | "table";
@@ -58,8 +59,15 @@ export type MarkdownShortcutAction = keyof typeof definitions;
 export type MarkdownShortcutOverrides = Partial<Record<MarkdownShortcutAction, string | null>>;
 export type MarkdownShortcutDefinition = ShortcutDefinition & { id: MarkdownShortcutAction };
 
-export const markdownShortcutCommands: readonly MarkdownShortcutDefinition[] = Object.entries(definitions)
+const commands = Object.entries(definitions)
   .map(([id, definition]) => ({ id: id as MarkdownShortcutAction, ...definition }));
+export const markdownShortcutCommands: readonly MarkdownShortcutDefinition[] = commands;
+
+export function getMarkdownShortcutCommands(locale: MarkdownLocale = "zh-CN"): readonly MarkdownShortcutDefinition[] {
+  if (locale === "zh-CN") return markdownShortcutCommands;
+  const t = markdownTranslator(locale);
+  return commands.map(command => ({ ...command, label: t(command.label), group: t(command.group) }));
+}
 
 function bindings(definition: ShortcutDefinition, override?: string | null): readonly Binding[] {
   if (override === null) return [];
@@ -70,21 +78,22 @@ function bindings(definition: ShortcutDefinition, override?: string | null): rea
 function findConflict(action: MarkdownShortcutAction, binding: string | null | undefined, overrides: MarkdownShortcutOverrides) {
   const definition: ShortcutDefinition = definitions[action];
   const keys = bindings(definition, binding).map(item => item.key);
-  return markdownShortcutCommands.find(other => other.id !== action
+  return commands.find(other => other.id !== action
     && other.scopes.some(scope => definition.scopes.includes(scope))
     && bindings(other, overrides[other.id]).some(item => keys.includes(item.key)));
 }
 
 export function checkMarkdownShortcut(action: MarkdownShortcutAction, input: string | null | undefined,
-  overrides: MarkdownShortcutOverrides): MarkdownShortcutIssue | undefined {
+  overrides: MarkdownShortcutOverrides, locale?: MarkdownLocale): MarkdownShortcutIssue | undefined {
   if (input === null) return undefined;
+  const t = markdownTranslator(locale);
   const defaultKey = definitions[action].key;
   const binding = input === undefined ? defaultKey : normalizeMarkdownShortcut(input);
-  if (!binding) return { kind: "invalid", message: "请输入有效的快捷键，例如 Ctrl+Shift+Enter。" };
-  const issue = keyIssue(binding);
+  if (!binding) return { kind: "invalid", message: t("请输入有效的快捷键，例如 Ctrl+Shift+Enter。") };
+  const issue = keyIssue(binding, t);
   if (issue && issue.kind !== "warning" && binding !== defaultKey) return issue;
   const conflict = findConflict(action, binding, overrides);
-  if (conflict) return { kind: "duplicate", message: `与「${conflict.label}」的快捷键冲突。` };
+  if (conflict) return { kind: "duplicate", message: t("与「{command}」的快捷键冲突。", { command: t(conflict.label) }) };
   // A shipped default can be restored even if some browsers reserve it.
   return issue && binding === defaultKey ? { ...issue, kind: "warning" } : issue;
 }
@@ -157,6 +166,8 @@ export function isInlineMarkdownFormat(action: string | undefined): action is In
   return action === "inline" || action === "bold" || action === "italic" || action === "strike";
 }
 
-export function formatMarkdownInline(value: string, range: TextSelection, action: InlineFormat) {
-  return action === "inline" ? wrapInlineCode(value, range) : wrapInline(value, range, inlineMarkers[action]);
+export function formatMarkdownInline(value: string, range: TextSelection, action: InlineFormat, t = markdownTranslator()) {
+  if (action === "inline") return wrapInlineCode(value, range, t("代码"));
+  const marker = inlineMarkers[action];
+  return wrapInline(value, range, marker, marker, t("文字"));
 }

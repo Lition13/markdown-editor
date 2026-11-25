@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import { MarkdownMessageError } from "../core/locale";
 import { renderMermaid } from "../diagrams/mermaidRender";
 import { useMarkdownEnvironment } from "./editorContext";
 export default function MermaidDiagram({ code }: { code: string }) {
@@ -6,20 +7,20 @@ export default function MermaidDiagram({ code }: { code: string }) {
   const [svg, setSvg] = useState("");
   const [error, setError] = useState("");
   const [showSource, setShowSource] = useState(false);
-  const { theme } = useMarkdownEnvironment();
+  const { theme, t } = useMarkdownEnvironment();
   useEffect(() => {
     let active = true;
     setSvg("");
     setError("");
     const timer = setTimeout(() => {
-      void renderMermaid(code, id, theme, () => active)
+      void renderMermaid(code, id, theme, t, () => active)
         .then((result) => { if (active) setSvg(result); })
         .catch((err: unknown) => {
           if (active)
             setError(
-              err instanceof Error
+              err instanceof MarkdownMessageError ? t(err.key, err.values) : err instanceof Error
                 ? err.message.split("\n").slice(0, 3).join("\n")
-                : "图表语法有误",
+                : t("图表语法有误"),
             );
         });
     }, 180);
@@ -27,22 +28,22 @@ export default function MermaidDiagram({ code }: { code: string }) {
       active = false;
       clearTimeout(timer);
     };
-  }, [code, id, theme]);
+  }, [code, id, theme, t]);
   return (
     <div className="markdown-mermaid">
       {svg ? (
         <div
           className="mermaid-canvas"
           role="img"
-          aria-label="Mermaid 图表"
+          aria-label={t("Mermaid 图表")}
           dangerouslySetInnerHTML={{ __html: svg }}
         />
       ) : error ? (
         <div className="markdown-diagram-error" role="status">
-          图表暂时无法预览：{error}
+          {t("图表暂时无法预览：{error}", { error })}
         </div>
       ) : (
-        <p className="markdown-loading">正在绘制图表…</p>
+        <p className="markdown-loading">{t("正在绘制图表…")}</p>
       )}
       <button
         type="button"
@@ -50,7 +51,7 @@ export default function MermaidDiagram({ code }: { code: string }) {
         aria-expanded={showSource}
         onClick={() => setShowSource(!showSource)}
       >
-        {showSource ? "收起源码" : "查看源码"}
+        {showSource ? t("收起源码") : t("查看源码")}
       </button>
       {(showSource || error) && (
         <pre>

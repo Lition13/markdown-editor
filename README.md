@@ -6,6 +6,8 @@
 
 浏览器会记住文件栏、大纲、状态栏和手动固定的顶栏。窄窗口会恢复上次打开的抽屉。
 
+顶栏的语言图标可在简体中文和 English 间切换。默认使用简体中文，之后会在当前浏览器恢复所选界面语言。
+
 顶栏的调色板打开「自定义主题」。可用浅色或深色作为基底，预览并调整工作区背景、侧栏、文字、强调色和代码底色。「保存并应用」将具名主题存到当前浏览器。可以保存多套，在「编辑主题」中选择后重新应用。
 
 在「编辑主题」中选择「新建主题」，打开「主题源码」即可粘贴或编辑 JSON。已有主题可通过「复制源码」分享。`base` 接受 `light`、`dark`，`colors` 的键对应 `background`（工作区）、`sidebar`（侧栏）、`text`（文字）、`accent`（强调色）及 `code`（代码底色）。省略的颜色沿用基底。
@@ -67,6 +69,7 @@ export function Example() {
 | 接口 | 用途 |
 | --- | --- |
 | `theme` | `light` 或 `dark`，可按实例使用不同主题 |
+| `locale` | `zh-CN` 或 `en`，设置编辑器、预览和弹层的界面语言，默认 `zh-CN` |
 | `className` | 设置组件外层样式 |
 | `allowExpand` | 控制编辑器的全屏入口，默认开启 |
 | `ariaLabel`、`placeholder` | 配置编辑区名称和提示 |
@@ -76,7 +79,7 @@ export function Example() {
 | `overlayContainer`、`overlayTopInset` | 指定弹层容器和视口顶部留白，可用于嵌入有固定标题栏的应用 |
 | `shortcuts` | 按命令 ID 覆盖快捷键，例如 `{ table: "Ctrl+Shift+F8" }`，将命令的值设为 `null` 可停用它的快捷键 |
 
-宿主可使用 `markdownShortcutCommands` 显示命令与默认键，使用 `checkMarkdownShortcut` 检查替换组合。自定义快捷键由宿主保存。
+宿主可使用 `getMarkdownShortcutCommands(locale)` 显示对应语言的命令与默认键，使用 `checkMarkdownShortcut(action, binding, overrides, locale)` 检查替换组合。`markdownShortcutCommands` 仍提供中文命令列表。自定义快捷键由宿主保存。
 
 宿主的工具栏可通过组件引用调用 `openFullscreen()`。
 

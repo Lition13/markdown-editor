@@ -35,6 +35,7 @@ import {
 import EditorDialog from "./EditorDialog";
 import { editorViewport } from "./editorViewport";
 import { resolveMarkdownLink, useMarkdownEnvironment, type MarkdownEditorHandle, type MarkdownMode } from "./editorContext";
+import { MarkdownMessageError, type MarkdownMessage } from "../core/locale";
 import ActionMenu, { type ActionItem, type MenuPoint } from "./ActionMenu";
 import MarkdownTableSize from "./MarkdownTableSize";
 import { newMarkdownTable, serializeMarkdownTable, type TableSize } from "../core/markdownTable";
@@ -274,7 +275,7 @@ function Editor({
   onExpand?: () => void;
 }) {
   const environment = useMarkdownEnvironment();
-  const keys = environment.shortcuts.labels;
+  const { t, shortcuts: { labels: keys } } = environment;
   const ref = useRef<HTMLTextAreaElement>(null);
   const inline = useRef<InlineMarkdownHandle>(null);
   const pendingFocus = useRef<TextSelection | null>(null);
@@ -289,7 +290,7 @@ function Editor({
   const [panel, setPanel] = useState<"link" | "image" | "help" | "table" | null>(null);
   const [url, setUrl] = useState(""),
     [label, setLabel] = useState(""),
-    [error, setError] = useState("");
+    [error, setError] = useState<MarkdownMessage | "">("");
   const [loading, setLoading] = useState(false);
   const [focusOnLoad, setFocusOnLoad] = useState(false);
   const keySequence = useMarkdownKeySequence(environment.shortcuts.hasSequence(mode));
@@ -406,8 +407,8 @@ function Editor({
       return edit(
         prefixLines(text, s, kind as "bullet" | "ordered" | "task" | "quote"),
       );
-    if (isInlineMarkdownFormat(kind)) return edit(formatMarkdownInline(text, s, kind));
-    if (kind === "code") return edit(insertCodeBlock(text, s, language));
+    if (isInlineMarkdownFormat(kind)) return edit(formatMarkdownInline(text, s, kind, t));
+    if (kind === "code") return edit(insertCodeBlock(text, s, language, t("代码")));
     if (kind === "rule") return edit(insertMarkdownRule(text, s));
     if (kind === "math") {
       const equation = text.slice(s.start, s.end) || "e = mc^2";
@@ -418,7 +419,7 @@ function Editor({
         insertBlock(
           text,
           s,
-          "```mermaid\nflowchart LR\n  A[开始] --> B[完成]\n```",
+          t("```mermaid\nflowchart LR\n  A[开始] --> B[完成]\n```"),
         ),
       );
   };
@@ -461,7 +462,7 @@ function Editor({
         latest.current,
         selection.current,
         markdownLink(
-          label || (panel === "image" ? "图片" : "链接"),
+          label || (panel === "image" ? t("图片") : t("链接")),
           safe,
           panel === "image",
         ),
@@ -488,13 +489,13 @@ function Editor({
           (image) =>
             new Promise<string>((resolve, reject) => {
               if (image.size > 2 * 1024 * 1024) {
-                reject(new Error("每张图片不能超过 2 MB"));
+                reject(new MarkdownMessageError("每张图片不能超过 2 MB"));
                 return;
               }
               const reader = new FileReader();
               reader.onload = () =>
                 resolve(markdownLink(image.name, String(reader.result), true));
-              reader.onerror = () => reject(new Error("图片读取失败"));
+              reader.onerror = () => reject(new MarkdownMessageError("图片读取失败"));
               reader.readAsDataURL(image);
             }),
         ),
@@ -506,7 +507,7 @@ function Editor({
       setPanel(null);
     } catch (e) {
       if (active.current)
-        setError(e instanceof Error ? e.message : "图片读取失败");
+        setError(e instanceof MarkdownMessageError ? e.key : "图片读取失败");
     } finally {
       if (active.current) setLoading(false);
       if (file.current) file.current.value = "";
@@ -641,46 +642,46 @@ function Editor({
     },
   });
   const commands: ActionItem[] = tools ? [
-    { id: "search", search: "搜索描述工具" },
-    ...["一", "二", "三", "四", "五", "六"].map((name, index) => {
+    { id: "search", search: t("搜索描述工具") },
+    ...(["一级标题", "二级标题", "三级标题", "四级标题", "五级标题", "六级标题"] as const).map((name, index) => {
       const depth = index + 1;
-      return option(`h${depth}`, `${name}级标题`, <Heading size={15} />, () => format(depth), `h${depth} 标题 heading`, mode === "live" ? keys[headingShortcuts[depth]] : undefined);
+      return option(`h${depth}`, t(name), <Heading size={15} />, () => format(depth), `h${depth} 标题 heading`, mode === "live" ? keys[headingShortcuts[depth]] : undefined);
     }),
-    ...(mode === "live" ? [option("paragraph", "普通段落", <Pilcrow size={15} />, () => format(0), "取消标题 paragraph", keys.paragraph)] : []),
-    option("bold", "描述加粗", <Bold size={15} />, () => format("bold"), "bold 粗体", keys.bold),
-    option("italic", "描述斜体", <Italic size={15} />, () => format("italic"), "italic", keys.italic),
-    option("strike", "描述删除线", <Strikethrough size={15} />, () => format("strike"), "strike", keys.strike),
-    option("inline", "描述行内代码", <Code size={15} />, () => format("inline"), "inline code", keys.inline),
-    option("bullet", "描述无序列表", <List size={15} />, () => format("bullet"), "bullet list", keys.bullet),
-    option("ordered", "描述有序列表", <ListOrdered size={15} />, () => format("ordered"), "ordered list", keys.ordered),
-    option("task", "描述待办列表", <ListChecks size={15} />, () => format("task"), "checklist todo 复选框", keys.task),
-    option("quote", "描述引用", <Quote size={15} />, () => format("quote"), "quote", keys.quote),
-    option("link", "插入描述链接", <Link size={15} />, () => showPanel("link"), "link", keys.link),
-    option("image", "插入描述图片", <ImagePlus size={15} />, () => showPanel("image"), "image", keys.image),
-    option("table", "描述表格", <Table2 size={15} />, () => showPanel("table"), "table", keys.table),
-    option("yaml", "YAML 文件头", <FileCode size={15} />, editYamlFrontmatter, "frontmatter SKILL.md 元数据"),
-    option("rule", "描述分隔线", <Minus size={15} />, () => format("rule"), "divider"),
+    ...(mode === "live" ? [option("paragraph", t("普通段落"), <Pilcrow size={15} />, () => format(0), "取消标题 paragraph", keys.paragraph)] : []),
+    option("bold", t("描述加粗"), <Bold size={15} />, () => format("bold"), "bold 粗体", keys.bold),
+    option("italic", t("描述斜体"), <Italic size={15} />, () => format("italic"), "italic", keys.italic),
+    option("strike", t("描述删除线"), <Strikethrough size={15} />, () => format("strike"), "strike", keys.strike),
+    option("inline", t("描述行内代码"), <Code size={15} />, () => format("inline"), "inline code", keys.inline),
+    option("bullet", t("描述无序列表"), <List size={15} />, () => format("bullet"), "bullet list", keys.bullet),
+    option("ordered", t("描述有序列表"), <ListOrdered size={15} />, () => format("ordered"), "ordered list", keys.ordered),
+    option("task", t("描述待办列表"), <ListChecks size={15} />, () => format("task"), "checklist todo 复选框", keys.task),
+    option("quote", t("描述引用"), <Quote size={15} />, () => format("quote"), "quote", keys.quote),
+    option("link", t("插入描述链接"), <Link size={15} />, () => showPanel("link"), "link", keys.link),
+    option("image", t("插入描述图片"), <ImagePlus size={15} />, () => showPanel("image"), "image", keys.image),
+    option("table", t("描述表格"), <Table2 size={15} />, () => showPanel("table"), "table", keys.table),
+    option("yaml", t("YAML 文件头"), <FileCode size={15} />, editYamlFrontmatter, "frontmatter SKILL.md 元数据"),
+    option("rule", t("描述分隔线"), <Minus size={15} />, () => format("rule"), "divider"),
     {
-      id: "code", label: "描述代码块", icon: <CodeXml size={15} />, keywords: "code block", shortcut: keys.code,
+      id: "code", label: t("描述代码块"), icon: <CodeXml size={15} />, keywords: "code block", shortcut: keys.code,
       children: languages.map(({ id, label, aliases }) =>
-        option(id, label, <CodeXml size={14} />, () => format("code", id), [id, ...aliases].join(" "))),
+        option(id, id === "plaintext" ? t("纯文本") : label, <CodeXml size={14} />, () => format("code", id), [id, ...aliases].join(" "))),
     },
-    option("math", "描述数学公式", <Sigma size={15} />, () => format("math"), "math formula latex", keys.math),
-    option("mermaid", "描述 Mermaid 图表", <FileCode size={15} />, () => format("mermaid"), "diagram"),
-    option("undo", "撤销描述编辑", <Undo2 size={15} />, () => undoEdit(), "undo", keys.undo, !canUndo),
-    option("redo", "重做描述编辑", <Redo2 size={15} />, () => undoEdit(true), "redo", keys.redo, !canRedo),
+    option("math", t("描述数学公式"), <Sigma size={15} />, () => format("math"), "math formula latex", keys.math),
+    option("mermaid", t("描述 Mermaid 图表"), <FileCode size={15} />, () => format("mermaid"), "diagram"),
+    option("undo", t("撤销描述编辑"), <Undo2 size={15} />, () => undoEdit(), "undo", keys.undo, !canUndo),
+    option("redo", t("重做描述编辑"), <Redo2 size={15} />, () => undoEdit(true), "redo", keys.redo, !canRedo),
     mode === "live"
-      ? option("source", "编辑描述源码", <Code size={15} />, () => onMode("source"), "source markdown", keys.source)
-      : option("live", "实时编辑描述", <Code size={15} />, () => onMode("live"), "live 正文", keys.source),
-    ...(onExpand && !expanded ? [option("expand", "全屏编辑描述", <Maximize2 size={15} />, toggleFullscreen, "fullscreen", keys.expand)] : []),
-    option("help", "Markdown 语法帮助", <HelpCircle size={15} />, () => showPanel("help"), "help", keys.help),
+      ? option("source", t("编辑描述源码"), <Code size={15} />, () => onMode("source"), "source markdown", keys.source)
+      : option("live", t("实时编辑描述"), <Code size={15} />, () => onMode("live"), "live 正文", keys.source),
+    ...(onExpand && !expanded ? [option("expand", t("全屏编辑描述"), <Maximize2 size={15} />, toggleFullscreen, "fullscreen", keys.expand)] : []),
+    option("help", t("Markdown 语法帮助"), <HelpCircle size={15} />, () => showPanel("help"), "help", keys.help),
   ] : [];
   const textarea = (
     <textarea
       ref={ref}
       className="detail-notes notes-editor-textarea"
       aria-label={environment.ariaLabel}
-      aria-description="输入 / 打开描述工具"
+      aria-description={t("输入 / 打开描述工具")}
       placeholder={environment.placeholder}
       value={value}
       onCompositionStart={() => { compositionStart.current = latest.current; }}
@@ -737,7 +738,7 @@ function Editor({
     />
   );
 
-  const panelLabel = panel === "image" ? "插入描述图片" : panel === "link" ? "插入描述链接" : panel === "table" ? "插入表格" : "Markdown 语法帮助";
+  const panelLabel = panel === "image" ? t("插入描述图片") : panel === "link" ? t("插入描述链接") : panel === "table" ? t("插入表格") : t("Markdown 语法帮助");
   return (
     <div className="markdown-notes" aria-busy={loading || undefined}>
       <input
@@ -746,14 +747,14 @@ function Editor({
         hidden
         multiple
         accept="image/png,image/jpeg,image/gif,image/webp,image/avif"
-        aria-label="插入本地 Markdown 图片"
+        aria-label={t("插入本地 Markdown 图片")}
         onChange={e => { void loadImages(Array.from(e.target.files ?? [])); }}
       />
-      {error && !panel && <p className="notes-edit-error" role="alert">{error}</p>}
+      {error && !panel && <p className="notes-edit-error" role="alert">{t(error)}</p>}
       <div className="notes-editor-body" onPointerDownCapture={keySequence.reset} onBlurCapture={keySequence.reset}>
         {mode === "live" ? (
           <div className="notes-live-document">
-            <Suspense fallback={<div className="markdown-loading">正在载入描述…</div>}>
+            <Suspense fallback={<div className="markdown-loading">{t("正在载入描述…")}</div>}>
               <InlineMarkdownEditor
                 ref={inline}
                 value={value}
@@ -775,17 +776,17 @@ function Editor({
           </div>
         ) : textarea}
       </div>
-      {keySequence.waiting && <div className="notes-key-sequence" role="status">已输入 {editorShortcutPrefix}，等待下一个键</div>}
+      {keySequence.waiting && <div className="notes-key-sequence" role="status">{t("已输入 {prefix}，等待下一个键", { prefix: editorShortcutPrefix })}</div>}
       {tools && (
         <ActionMenu
-          label="描述工具"
+          label={t("描述工具")}
           className="notes-command-menu"
           items={commands}
           point={tools}
           onClose={closeTools}
           resolvePoint={() => pointAt(selection.current.end)}
           search={{
-            emptyText: "没有匹配的工具",
+            emptyText: t("没有匹配的工具"),
             selectFirst: true,
             closeOnEmptyBackspace: true,
             onEmptySlash: () => {
@@ -800,39 +801,41 @@ function Editor({
           dialog
           initialFocus={panel === "table" ? ".notes-table-size-fields input" : undefined}
           label={panelLabel}
-          closeLabel={panel === "help" ? "关闭语法帮助" : "关闭插入面板"}
+          closeLabel={panel === "help" ? t("关闭语法帮助") : t("关闭插入面板")}
           className="notes-command-panel"
           point={panelPoint}
           onClose={closePanel}
           items={[{
             id: "description-panel",
-            content: panel === "table" ? <MarkdownTableSize initial={{ rows: 3, columns: 2 }} label="插入表格" cycleFields onApply={insertTable} /> : panel === "help" ? (
+            content: panel === "table" ? <MarkdownTableSize initial={{ rows: 3, columns: 2 }} label={t("插入表格")} cycleFields onApply={insertTable} /> : panel === "help" ? (
               <div className="notes-help-panel">
-                <pre>{"# 一级标题 · ## 二级标题\n**加粗**  *斜体*  ~~删除线~~\n`行内代码`\n- 无序列表\n1. 有序列表\n- [ ] 未完成  - [x] 已完成\n> 引用\n[文字](https://example.com)\n![图片说明](图片地址)\n| 标题 | 标题 |\n| --- | --- |\n| 内容 | 内容 |\n$行内公式$ · $$块级公式$$\n脚注[^1]\n[^1]: 脚注内容"}</pre>
-                <p>输入 / 搜索工具和对应快捷键。带 → 的组合先按左边，再按右边。{keys.table && `${keys.table} 插入表格。`}连续输入 // 插入 /。列表内回车续写，空列表项回车退出。支持粘贴或拖入本地图片。</p>
+                <pre>{t("# 一级标题 · ## 二级标题\n**加粗**  *斜体*  ~~删除线~~\n`行内代码`\n- 无序列表\n1. 有序列表\n- [ ] 未完成  - [x] 已完成\n> 引用\n[文字](https://example.com)\n![图片说明](图片地址)\n| 标题 | 标题 |\n| --- | --- |\n| 内容 | 内容 |\n$行内公式$ · $$块级公式$$\n脚注[^1]\n[^1]: 脚注内容")}</pre>
+                <p>{t("输入 / 搜索工具和对应快捷键。带 → 的组合先按左边，再按右边。")}
+                  {keys.table && t("{shortcut} 插入表格。", { shortcut: keys.table })}
+                  {t("连续输入 // 插入 /。列表内回车续写，空列表项回车退出。支持粘贴或拖入本地图片。")}</p>
               </div>
             ) : (
               <form className="notes-insert-form" onSubmit={e => { e.preventDefault(); insertLink(); }}>
                 <label>
-                  {panel === "link" ? "显示文字" : "图片说明"}
-                  <input aria-label="Markdown 链接文字" value={label} onChange={e => setLabel(e.target.value)} />
+                  {panel === "link" ? t("显示文字") : t("图片说明")}
+                  <input aria-label={t("Markdown 链接文字")} value={label} onChange={e => setLabel(e.target.value)} />
                 </label>
                 <label>
-                  {panel === "link" ? "链接地址" : "图片地址"}
+                  {panel === "link" ? t("链接地址") : t("图片地址")}
                   <input
-                    aria-label="Markdown 地址"
-                    placeholder={panel === "image" ? "https://…/image.png" : "https://… 或 #章节"}
+                    aria-label={t("Markdown 地址")}
+                    placeholder={panel === "image" ? "https://…/image.png" : t("https://… 或 #章节")}
                     value={url}
                     onChange={e => setUrl(e.target.value)}
                   />
                 </label>
-                {error && <p className="notes-edit-error" role="alert">{error}</p>}
+                {error && <p className="notes-edit-error" role="alert">{t(error)}</p>}
                 {panel === "image" && (
                   <button type="button" className="outline-button small" onClick={() => file.current?.click()} disabled={loading}>
-                    从设备选择图片
+                    {t("从设备选择图片")}
                   </button>
                 )}
-                <button className="primary-button small" type="submit">插入</button>
+                <button className="primary-button small" type="submit">{t("插入")}</button>
               </form>
             ),
           }]}

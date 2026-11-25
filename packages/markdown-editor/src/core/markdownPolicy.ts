@@ -49,5 +49,4 @@ export const markdownSchema: typeof defaultSchema = {
   protocols: { ...defaultSchema.protocols, src: ["http", "https", "data"] },
 };
 
-export const markdownFootnotes = { footnoteLabel: "注释", footnoteBackLabel: "返回正文" };
 export const markdownMath = { throwOnError: false, trust: false, strict: "ignore" as const, maxExpand: 1000 };

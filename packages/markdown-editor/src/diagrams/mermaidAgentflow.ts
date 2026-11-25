@@ -1,4 +1,5 @@
 import type { DiagramNote } from "./mermaidDiagramNotes";
+import { markdownTranslator, type MarkdownMessage } from "../core/locale";
 
 type Metadata = { metadata?: Record<string, unknown> };
 export interface AgentflowModel {
@@ -11,11 +12,11 @@ export interface AgentflowModel {
 }
 export interface AgentflowDatabase { getData(): unknown; getSemanticModel(): AgentflowModel }
 
-export const agentflowKinds: Readonly<Record<string, string>> = {
+export const agentflowKinds: Readonly<Record<string, MarkdownMessage>> = {
   task: "任务", tool: "工具", input: "输入", decision: "判断", refdoc: "参考资料", action: "动作", connector: "连接器",
 };
-const semantics: Readonly<Record<string, string>> = { sequence: "顺序", reference: "参考", failure: "失败" };
-const metadataNames: Readonly<Record<string, string>> = {
+const semantics: Readonly<Record<string, MarkdownMessage>> = { sequence: "顺序", reference: "参考", failure: "失败" };
+const metadataNames: Readonly<Record<string, MarkdownMessage>> = {
   description: "说明", instruction: "指令", model: "模型", params: "输入约定", returns: "返回约定", value: "值", example: "示例",
   connectorRef: "连接器引用", protocol: "协议", endpoint: "端点",
 };
@@ -27,7 +28,7 @@ const labelText = (value: string) => value.replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|
 
 // Metadata remains data: even instructions, endpoints and nested values are
 // literal text. The diagram's parser owns validation and prototype-key removal.
-export function agentflowNotes(model: AgentflowModel): DiagramNote[] {
+export function agentflowNotes(model: AgentflowModel, t = markdownTranslator()): DiagramNote[] {
   const notes: DiagramNote[] = [];
   const add = (context: string, label: string) => { if (label) notes.push({ context, label }); };
   const meta = (context: string, value?: Record<string, unknown>) => {
@@ -36,35 +37,36 @@ export function agentflowNotes(model: AgentflowModel): DiagramNote[] {
       const label = typeof entry === "string" ? entry : JSON.stringify(entry, function (_key, value: unknown) {
         if (value && typeof value === "object") {
           while (ancestors.length && ancestors[ancestors.length - 1] !== this) ancestors.pop();
-          if (ancestors.includes(value)) return "[循环引用]";
+          if (ancestors.includes(value)) return t("[循环引用]");
           ancestors.push(value);
         }
         return value;
       });
-      add(context + " · " + (Object.hasOwn(metadataNames, key) ? metadataNames[key] : key), label ?? String(entry));
+      add(context + " · " + (Object.hasOwn(metadataNames, key) ? t(metadataNames[key]) : key), label ?? String(entry));
     }
   };
   for (const flow of model.subGraphs) {
-    const context = "流程 · " + labelText(flow.title || flow.id) + " [" + flow.id + "]";
-    add(context, flow.nodes.length ? "成员：" + flow.nodes.join("、") : "空流程");
+    const context = t("流程") + " · " + labelText(flow.title || flow.id) + " [" + flow.id + "]";
+    add(context, flow.nodes.length ? t("成员：{members}", { members: flow.nodes.join(t("、")) }) : t("空流程"));
     meta(context, flow.metadata);
   }
   for (const vertex of model.vertices) {
-    const kind = vertex.vertexKind && Object.hasOwn(agentflowKinds, vertex.vertexKind) ? agentflowKinds[vertex.vertexKind] : "节点";
+    const kind = t(vertex.vertexKind && Object.hasOwn(agentflowKinds, vertex.vertexKind) ? agentflowKinds[vertex.vertexKind] : "节点");
     const context = kind + " · " + labelText(vertex.label || vertex.id) + " [" + vertex.id + "]";
     add(kind + " [" + vertex.id + "]", labelText(vertex.label || vertex.id));
     meta(context, vertex.metadata);
   }
   for (const connector of model.connectors) {
-    const context = "连接器 · " + labelText(connector.title || connector.id) + " [" + connector.id + "]";
-    add(context, "外部系统定义"); meta(context, connector.metadata);
+    const context = t("连接器") + " · " + labelText(connector.title || connector.id) + " [" + connector.id + "]";
+    add(context, t("外部系统定义")); meta(context, connector.metadata);
   }
   model.edges.forEach((edge, index) => {
-    const kind = edge.edgeSemantic && Object.hasOwn(semantics, edge.edgeSemantic) ? semantics[edge.edgeSemantic] : "连线";
-    const context = `R${index + 1} · ${edge.start} ${kind === "参考" ? "—" : kind === "失败" ? "×" : "→"} ${edge.end} · ${kind}`;
-    add(context, edge.label ? labelText(edge.label) : kind + "关系");
+    const kind = t(edge.edgeSemantic && Object.hasOwn(semantics, edge.edgeSemantic) ? semantics[edge.edgeSemantic] : "连线");
+    const connector = edge.edgeSemantic === "reference" ? "—" : edge.edgeSemantic === "failure" ? "×" : "→";
+    const context = `R${index + 1} · ${edge.start} ${connector} ${edge.end} · ${kind}`;
+    add(context, edge.label ? labelText(edge.label) : t("{kind}关系", { kind }));
     meta(context, edge.metadata);
   });
-  for (const item of model.diagnostics) add("提示 · " + item.id, item.message);
+  for (const item of model.diagnostics) add(t("提示") + " · " + item.id, item.message);
   return notes;
 }

@@ -4,6 +4,7 @@ import { codeLanguageId, completeCodeFence, suggestCodeLanguages } from "../core
 import { codeBodyEnd, emptyCodeFenceRemoval } from "../core/markdownFence";
 import { codeFenceAt, projection } from "./markdownProjection";
 import { codeLanguageOption } from "./markdownLanguagePicker";
+import { widgetEnvironment } from "./widgetEnvironment";
 
 const chooseLanguage = StateEffect.define<number | null>();
 const initial = { index: 0, dismissed: false };
@@ -54,11 +55,12 @@ function languageTooltip(view: EditorView) {
   const dom = view.dom.ownerDocument.createElement("div");
   dom.className = "notes-code-suggestions";
   dom.setAttribute("role", "listbox");
-  dom.setAttribute("aria-label", "代码语言建议");
   const update = () => {
+    const { t } = view.state.facet(widgetEnvironment).getSnapshot();
+    dom.setAttribute("aria-label", t("代码语言建议"));
     const active = view.state.field(languageChoice).index;
     dom.replaceChildren(...choices(view.state).map((language, index) => {
-      const item = codeLanguageOption(language);
+      const item = codeLanguageOption(language, t);
       item.setAttribute("aria-selected", String(index === active));
       item.addEventListener("mousedown", event => event.preventDefault());
       item.addEventListener("click", () => { finishFence(view, language.id); });

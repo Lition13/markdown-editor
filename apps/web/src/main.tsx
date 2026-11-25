@@ -1,12 +1,13 @@
 import {
   inspectMarkdown, MarkdownEditor, readMarkdownShortcutOverrides,
-  type MarkdownEditorHandle, type MarkdownMode, type MarkdownOutlineItem, type MarkdownShortcutOverrides, type MarkdownTheme,
+  type MarkdownEditorHandle, type MarkdownLocale, type MarkdownMode, type MarkdownOutlineItem, type MarkdownShortcutOverrides, type MarkdownTheme,
 } from "@lition13/markdown-editor";
-import { CodeXml, FileText, FolderOpen, Github, Keyboard, ListTree, Maximize2, Moon, Palette, PanelBottom, PencilLine, Sun, X } from "lucide-react";
+import { CodeXml, FileText, FolderOpen, Github, Keyboard, Languages, ListTree, Maximize2, Moon, Palette, PanelBottom, PencilLine, Sun, X } from "lucide-react";
 import { StrictMode, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "@lition13/markdown-editor/style.css";
 import FileManager from "./FileManager";
+import { formatDocumentCount, useWebLocale, useWebText, WebLocale, webTranslator } from "./locale";
 import ShortcutSettings from "./ShortcutSettings";
 import SidePanel from "./SidePanel";
 import ThemeSettings from "./ThemeSettings";
@@ -15,6 +16,7 @@ import { useFileLibrary } from "./useFileLibrary";
 import "./site.css";
 
 const themeKey = "lition13-markdown-editor-theme";
+const localeKey = "lition13-markdown-editor-locale";
 const statusKey = "lition13-markdown-editor-status-bar";
 const filesKey = "lition13-markdown-editor-file-panel";
 const outlineKey = "lition13-markdown-editor-outline-panel";
@@ -76,6 +78,7 @@ function useCompactLayout() {
 }
 
 function Toolbar({ children }: { children: ReactNode }) {
+  const t = useWebText();
   const [hovered, setHovered] = useState(false);
   const [held, setHeld] = useVisibility(toolbarKey, false);
   const [keyboard, setKeyboard] = useState(false);
@@ -103,13 +106,13 @@ function Toolbar({ children }: { children: ReactNode }) {
         setKeyboard(false);
         handle.current?.focus({ preventScroll: true });
       }}>
-      <button ref={handle} type="button" className="toolbar-handle" aria-label="顶部工具栏"
+      <button ref={handle} type="button" className="toolbar-handle" aria-label={t("顶部工具栏")}
         aria-controls="workbench-toolbar" aria-expanded={visible} aria-pressed={held}
-        title={held ? "取消固定顶部工具栏" : "固定顶部工具栏"} onClick={() => setHeld(value => !value)}>
+        title={held ? t("取消固定顶部工具栏") : t("固定顶部工具栏")} onClick={() => setHeld(value => !value)}>
         <span aria-hidden="true" className="toolbar-grip" />
-        <span aria-hidden="true" className="toolbar-handle-label">工具栏</span>
+        <span aria-hidden="true" className="toolbar-handle-label">{t("工具栏")}</span>
       </button>
-      <div className="workbench-toolbar" id="workbench-toolbar" aria-label="工具栏" hidden={!visible}>
+      <div className="workbench-toolbar" id="workbench-toolbar" aria-label={t("工具栏")} hidden={!visible}>
         {children}
       </div>
     </header>
@@ -118,7 +121,7 @@ function Toolbar({ children }: { children: ReactNode }) {
 
 function Workspace({
   library, theme, customThemeActive, toggleTheme, showThemeSettings, compact, filesOpen, outlineOpen, statusOpen, showFiles,
-  toggleFiles, toggleOutline, closeOutline, toggleStatus, shortcuts, showShortcuts,
+  toggleFiles, toggleOutline, closeOutline, toggleStatus, shortcuts, showShortcuts, onLocaleChange,
 }: {
   library: ReturnType<typeof useFileLibrary>;
   theme: MarkdownTheme;
@@ -136,7 +139,10 @@ function Workspace({
   toggleStatus: () => void;
   shortcuts: MarkdownShortcutOverrides;
   showShortcuts: () => void;
+  onLocaleChange: (locale: MarkdownLocale) => void;
 }) {
+  const locale = useWebLocale();
+  const t = webTranslator(locale);
   const [mode, setMode] = useState<MarkdownMode>("live");
   const [chosenHeading, setChosenHeading] = useState<number>();
   const editor = useRef<MarkdownEditorHandle>(null);
@@ -144,7 +150,7 @@ function Workspace({
   const { current, ready, status, change } = library;
   const value = current?.value ?? "";
   const inspect = outlineOpen || statusOpen;
-  const information = useMemo(() => inspect ? inspectMarkdown(value) : null, [inspect, value]);
+  const information = useMemo(() => inspect ? inspectMarkdown(value, locale) : null, [inspect, value, locale]);
   useLayoutEffect(() => { window.scrollTo(0, 0); }, []);
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -180,46 +186,57 @@ function Workspace({
   return (
     <>
       <Toolbar>
-        <button type="button" className="button panel-toggle" aria-label="文件管理" title="文件管理"
+        <button type="button" className="button panel-toggle" aria-label={t("文件管理")} title={t("文件管理")}
           aria-haspopup={compact ? "dialog" : undefined} aria-controls="file-manager" aria-expanded={filesOpen}
           disabled={!ready} onClick={toggleFiles}>
-          <FolderOpen size={16} aria-hidden="true" /><span className="tool-label">文件</span>
+          <FolderOpen size={16} aria-hidden="true" /><span className="tool-label">{t("文件")}</span>
         </button>
         <span className="document-name" title={current?.name}>{current?.name}</span>
         {current && (
           <>
-            <div className="view-options" role="group" aria-label="文档视图">
-              <button type="button" aria-pressed={mode === "live"} onClick={() => setMode("live")}><PencilLine size={15} aria-hidden="true" />编辑</button>
-              <button type="button" aria-pressed={mode === "source"} onClick={() => setMode("source")}><CodeXml size={16} aria-hidden="true" />源码</button>
+            <div className="view-options" role="group" aria-label={t("文档视图")}>
+              <button type="button" aria-label={t("编辑")} title={t("编辑")} aria-pressed={mode === "live"} onClick={() => setMode("live")}>
+                <PencilLine size={15} aria-hidden="true" /><span className="view-label">{t("编辑")}</span>
+              </button>
+              <button type="button" aria-label={t("源码")} title={t("源码")} aria-pressed={mode === "source"} onClick={() => setMode("source")}>
+                <CodeXml size={16} aria-hidden="true" /><span className="view-label">{t("源码")}</span>
+              </button>
             </div>
-            <button type="button" className="icon-control" aria-label="全屏编辑" title="全屏编辑" aria-haspopup="dialog"
+            <button type="button" className="icon-control" aria-label={t("全屏编辑")} title={t("全屏编辑")} aria-haspopup="dialog"
               onClick={() => editor.current?.openFullscreen()}>
               <Maximize2 size={17} aria-hidden="true" />
             </button>
           </>
         )}
-        <button type="button" className="button panel-toggle" aria-label="文档大纲" title="文档大纲"
+        <button type="button" className="button panel-toggle" aria-label={t("文档大纲")} title={t("文档大纲")}
           aria-haspopup={compact ? "dialog" : undefined} aria-controls="document-outline" aria-expanded={outlineOpen}
           onClick={toggleOutline}>
-          <ListTree size={16} aria-hidden="true" /><span className="tool-label">大纲</span>
+          <ListTree size={16} aria-hidden="true" /><span className="tool-label">{t("大纲")}</span>
         </button>
-        <button type="button" className="button panel-toggle" aria-label="状态栏"
-          title={statusOpen ? "隐藏状态栏" : "显示状态栏"} aria-controls="workspace-status" aria-pressed={statusOpen}
+        <button type="button" className="button panel-toggle" aria-label={t("状态栏")}
+          title={statusOpen ? t("隐藏状态栏") : t("显示状态栏")} aria-controls="workspace-status" aria-pressed={statusOpen}
           onClick={toggleStatus}>
-          <PanelBottom size={16} aria-hidden="true" /><span className="tool-label">状态栏</span>
+          <PanelBottom size={16} aria-hidden="true" /><span className="tool-label">{t("状态栏")}</span>
         </button>
-        <button type="button" className="icon-control" aria-label="快捷键设置" title="快捷键设置" aria-haspopup="dialog" onClick={showShortcuts}>
+        <button type="button" className="icon-control" aria-label={t("快捷键设置")} title={t("快捷键设置")} aria-haspopup="dialog" onClick={showShortcuts}>
           <Keyboard size={18} aria-hidden="true" />
         </button>
-        <button type="button" className="icon-control" aria-label={theme === "dark" ? "切换浅色主题" : "切换深色主题"}
-          title={theme === "dark" ? "切换浅色主题" : "切换深色主题"} onClick={toggleTheme}>
+        <button type="button" className="icon-control" aria-label={theme === "dark" ? t("切换浅色主题") : t("切换深色主题")}
+          title={theme === "dark" ? t("切换浅色主题") : t("切换深色主题")} onClick={toggleTheme}>
           {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
         </button>
-        <button type="button" className="icon-control theme-control" aria-label="自定义主题" title="自定义主题"
+        <button type="button" className="icon-control theme-control" aria-label={t("自定义主题")} title={t("自定义主题")}
           aria-controls="theme-settings" aria-haspopup="dialog" data-active={customThemeActive} onClick={showThemeSettings}>
           <Palette size={18} aria-hidden="true" />
         </button>
-        <a className="icon-control github" href={repository} target="_blank" rel="noreferrer" aria-label="GitHub 源码" title="GitHub 源码">
+        <label className="icon-control language-control" title={t("界面语言")}>
+          <Languages size={18} aria-hidden="true" />
+          <select aria-label={t("界面语言")} value={locale} onChange={event => onLocaleChange(event.currentTarget.value === "en" ? "en" : "zh-CN")}>
+            <option value="zh-CN" lang="zh-CN">简体中文</option>
+            <option value="en" lang="en">English</option>
+          </select>
+        </label>
+        <a className="icon-control github" href={repository} target="_blank" rel="noreferrer" aria-label={t("GitHub 源码")} title={t("GitHub 源码")}>
           <Github size={18} />
         </a>
       </Toolbar>
@@ -229,6 +246,7 @@ function Workspace({
             <MarkdownEditor
               ref={editor}
               theme={theme}
+              locale={locale}
               mode={mode}
               onModeChange={setMode}
               shortcuts={shortcuts}
@@ -239,21 +257,21 @@ function Workspace({
         ) : ready && (
           <div className="workspace-body workspace-empty">
             <FileText size={30} aria-hidden="true" />
-            <h2>暂无 Markdown 文件</h2>
-            <button type="button" className="button primary" onClick={showFiles}>新建或导入</button>
+            <h2>{t("暂无 Markdown 文件")}</h2>
+            <button type="button" className="button primary" onClick={showFiles}>{t("新建或导入")}</button>
           </div>
         )}
       </main>
-      <SidePanel id="document-outline" title="文档大纲" className="document-outline"
+      <SidePanel id="document-outline" title={t("文档大纲")} className="document-outline"
         open={outlineOpen} compact={compact} onDismiss={closeOutline}>
         <div className="file-manager-heading">
-          <h2 id="document-outline-title"><ListTree size={16} aria-hidden="true" />文档大纲</h2>
-          <button type="button" className="icon-control" aria-label="关闭文档大纲" onClick={closeOutline}>
+          <h2 id="document-outline-title"><ListTree size={16} aria-hidden="true" />{t("文档大纲")}</h2>
+          <button type="button" className="icon-control" aria-label={t("关闭文档大纲")} onClick={closeOutline}>
             <X size={17} aria-hidden="true" />
           </button>
         </div>
         {headings.length ? (
-          <nav className="outline-links" aria-label="章节">
+          <nav className="outline-links" aria-label={t("章节")}>
             {headings.map(heading => (
               <button key={heading.offset} type="button" title={heading.title}
                 style={{ paddingInlineStart: 10 + (heading.depth - shallowest) * 8 }}
@@ -263,26 +281,28 @@ function Workspace({
             ))}
           </nav>
         ) : (
-          <p className="outline-empty">暂无 Markdown 标题</p>
+          <p className="outline-empty">{t("暂无 Markdown 标题")}</p>
         )}
       </SidePanel>
-      <footer ref={footer} id="workspace-status" className="workspace-footer" aria-label="状态栏" hidden={!statusOpen}>
-          <span role="status" className="save-status">{status}</span>
+      <footer ref={footer} id="workspace-status" className="workspace-footer" aria-label={t("状态栏")} hidden={!statusOpen}>
+          <span role="status" className="save-status">{t(status)}</span>
           {current && information && (
-            <span className="document-statistics" role="group" aria-label="文档统计"
-              title="按正文统计字词，行数按 Markdown 源码计算">
-              <span>{information.words.toLocaleString("zh-CN")} 字词</span>
-              <span>{information.lines.toLocaleString("zh-CN")} 行</span>
+            <span className="document-statistics" role="group" aria-label={t("文档统计")}
+              title={t("按正文统计字词，行数按 Markdown 源码计算")}>
+              <span>{formatDocumentCount(information.words, "words", locale)}</span>
+              <span>{formatDocumentCount(information.lines, "lines", locale)}</span>
             </span>
           )}
       </footer>
-      {!statusOpen && <span role="status" className="visually-hidden">{status}</span>}
+      {!statusOpen && <span role="status" className="visually-hidden">{t(status)}</span>}
     </>
   );
 }
 
 function App() {
   const library = useFileLibrary();
+  const [locale, setLocale] = useState<MarkdownLocale>(() => preference(localeKey) === "en" ? "en" : "zh-CN");
+  const t = webTranslator(locale);
   const [appearance, setAppearance] = useState(readTheme);
   const [themeSettingsOpen, setThemeSettingsOpen] = useState(false);
   const selectedTheme = appearance.themes.find(theme => theme.id === appearance.customId);
@@ -301,6 +321,18 @@ function App() {
   });
   const filesOpen = compact ? drawer === "files" : filesVisible;
   const outlineOpen = compact ? drawer === "outline" : outlineVisible;
+
+  useLayoutEffect(() => {
+    document.documentElement.lang = locale;
+    document.title = t("Markdown 编辑器");
+    document.querySelector('meta[name="description"]')?.setAttribute("content",
+      t("在浏览器里实时编辑 Markdown，用文件夹整理文档，从大纲跳转到章节，导出 Markdown 文件。"));
+  }, [locale, t]);
+
+  function changeLocale(next: MarkdownLocale) {
+    setLocale(next);
+    savePreference(localeKey, next);
+  }
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -346,14 +378,14 @@ function App() {
 
   function saveCustomTheme(theme: CustomTheme, existingId: string) {
     const { themes } = readTheme();
-    const nameError = validateThemeName(theme.name, existingId, themes);
+    const nameError = validateThemeName(theme.name, existingId, themes, t);
     if (nameError) return nameError;
     const saved = { ...theme, name: theme.name.trim(), id: existingId || crypto.randomUUID() };
     const at = themes.findIndex(theme => theme.id === saved.id);
     if (at === -1) themes.push(saved);
     else themes[at] = saved;
     const next: ThemePreference = { active: "custom", customId: saved.id, themes };
-    if (!savePreference(themeKey, JSON.stringify(next))) return "当前浏览器无法保存主题设置。";
+    if (!savePreference(themeKey, JSON.stringify(next))) return t("当前浏览器无法保存主题设置。");
     setAppearance(next);
   }
 
@@ -367,7 +399,7 @@ function App() {
     }
   }
 
-  return (
+  return <WebLocale.Provider value={locale}>
     <div className="workbench" data-files={!compact && filesOpen} data-outline={!compact && outlineOpen}>
       <Workspace key={library.current?.id ?? "workspace"} library={library} theme={theme}
         customThemeActive={!!customTheme} showThemeSettings={() => setThemeSettingsOpen(true)}
@@ -376,14 +408,14 @@ function App() {
         toggleTheme={toggleTheme}
         toggleFiles={filesOpen ? closeFiles : showFiles}
         toggleOutline={outlineOpen ? closeOutline : () => { if (compact) setDrawer("outline"); else setOutlineVisible(true); }}
-        closeOutline={closeOutline} toggleStatus={() => setStatusOpen(value => !value)} />
+        closeOutline={closeOutline} toggleStatus={() => setStatusOpen(value => !value)} onLocaleChange={changeLocale} />
       <FileManager library={library} open={filesOpen} compact={compact} onClose={closeFiles} />
       {shortcutsOpen && <ShortcutSettings value={shortcuts} onChange={updateShortcuts} onClose={() => setShortcutsOpen(false)}
         storageFailed={shortcutStorageFailed} />}
       {themeSettingsOpen && <ThemeSettings base={theme} themes={appearance.themes} selected={selectedTheme}
         onSave={saveCustomTheme} onClose={() => setThemeSettingsOpen(false)} />}
     </div>
-  );
+  </WebLocale.Provider>;
 }
 
 createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);

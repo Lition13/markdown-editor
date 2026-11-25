@@ -72,11 +72,12 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
   leaveTable: LeaveTable;
 }) {
   const environment = useMarkdownEnvironment();
+  const { t } = environment;
   const shortcuts = environment.shortcuts;
   const keySequence = useMarkdownKeySequence(shortcuts.hasSequence("table"));
   const [editing, setEditing] = useState<CellEdit | null>(null);
   const [panel, setPanel] = useState<TablePanel | null>(null);
-  const [copyFeedback, setCopyFeedback] = useState("");
+  const [copyFeedback, setCopyFeedback] = useState<"" | "已复制表格" | "复制表格失败">("");
   const panelRef = useRef<TablePanel | null>(null);
   const field = useRef<HTMLInputElement>(null);
   const toolbar = useRef<HTMLDivElement>(null);
@@ -233,7 +234,7 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
       event.preventDefault();
       event.stopPropagation();
       if (!event.repeat) {
-        const edit = formatMarkdownInline(entry.draft, { start: input.selectionStart ?? 0, end: input.selectionEnd ?? 0 }, action);
+        const edit = formatMarkdownInline(entry.draft, { start: input.selectionStart ?? 0, end: input.selectionEnd ?? 0 }, action, t);
         input.value = edit.value;
         input.setSelectionRange(edit.start, edit.end);
         cellSelection.current = { start: edit.start, end: edit.end };
@@ -290,7 +291,7 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
     const row = layout.rows.findIndex(item => item.from === rowOffset);
     if (row < 0) return children;
     const entry = editing?.row === row && editing.column === column ? editing : null;
-    const label = `表格第 ${row + 1} 行第 ${column + 1} 列`;
+    const label = t("表格第 {row} 行第 {column} 列", { row: row + 1, column: column + 1 });
     return <span className="notes-table-cell" tabIndex={entry ? -1 : 0}
       onContextMenu={event => openPanel("actions", { row, column }, event)}
       onMouseDown={event => {
@@ -322,7 +323,7 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
         startEditing(row, column);
       }}>
       <span className={entry ? "notes-table-cell-hidden" : undefined} aria-hidden={!!entry}>{children}</span>
-      {entry && <input key={entry.key} ref={bindField} aria-label={`编辑${label}`} value={entry.draft} spellCheck={false}
+      {entry && <input key={entry.key} ref={bindField} aria-label={t("编辑{label}", { label })} value={entry.draft} spellCheck={false}
         onCompositionStart={() => {
           keySequence.reset();
           compositionStart.current = entry.draft;
@@ -394,9 +395,9 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
     };
   }, [toolbarVisible, host, environment.topInset, environment.overlay]);
   const alignments = [
-    { value: "left", label: "左对齐", Icon: AlignLeft },
-    { value: "center", label: "居中对齐", Icon: AlignCenter },
-    { value: "right", label: "右对齐", Icon: AlignRight },
+    { value: "left", label: t("左对齐"), Icon: AlignLeft },
+    { value: "center", label: t("居中对齐"), Icon: AlignCenter },
+    { value: "right", label: t("右对齐"), Icon: AlignRight },
   ] as const;
   const actions: ActionItem[] = [];
   if (panel?.kind === "actions") {
@@ -406,45 +407,45 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
       id, label, disabled, shortcut, keepOpen: true, run: () => changeStructure(command, address),
     });
     actions.push(
-      action("row-before", "上方插入行", { kind: "insert-row", direction: -1 }, row === 0),
-      action("row-after", "下方插入行", { kind: "insert-row", direction: 1 }, false, shortcuts.labels.insertRow),
-      action("col-before", "左侧插入列", { kind: "insert-column", direction: -1 }),
-      action("col-after", "右侧插入列", { kind: "insert-column", direction: 1 }),
+      action("row-before", t("上方插入行"), { kind: "insert-row", direction: -1 }, row === 0),
+      action("row-after", t("下方插入行"), { kind: "insert-row", direction: 1 }, false, shortcuts.labels.insertRow),
+      action("col-before", t("左侧插入列"), { kind: "insert-column", direction: -1 }),
+      action("col-after", t("右侧插入列"), { kind: "insert-column", direction: 1 }),
       { id: "move-divider", separator: true },
-      action("row-up", "上移该行", { kind: "move-row", direction: -1 }, row <= 1, shortcuts.labels.rowUp),
-      action("row-down", "下移该行", { kind: "move-row", direction: 1 }, row === 0 || row === layout.rows.length - 1, shortcuts.labels.rowDown),
-      action("col-left", "左移该列", { kind: "move-column", direction: -1 }, column === 0, shortcuts.labels.columnLeft),
-      action("col-right", "右移该列", { kind: "move-column", direction: 1 }, column === layout.columns - 1, shortcuts.labels.columnRight),
+      action("row-up", t("上移该行"), { kind: "move-row", direction: -1 }, row <= 1, shortcuts.labels.rowUp),
+      action("row-down", t("下移该行"), { kind: "move-row", direction: 1 }, row === 0 || row === layout.rows.length - 1, shortcuts.labels.rowDown),
+      action("col-left", t("左移该列"), { kind: "move-column", direction: -1 }, column === 0, shortcuts.labels.columnLeft),
+      action("col-right", t("右移该列"), { kind: "move-column", direction: 1 }, column === layout.columns - 1, shortcuts.labels.columnRight),
       { id: "table-divider", separator: true },
-      action("row-remove", "删除行", { kind: "delete-row" }, row === 0, shortcuts.labels.deleteRow),
-      action("col-remove", "删除列", { kind: "delete-column" }, layout.columns === 1),
-      { id: "copy", label: "复制表格", keepOpen: true, run: () => void copyTable() },
-      { id: "format", label: "格式化表格源码", keepOpen: true, run: () => {
+      action("row-remove", t("删除行"), { kind: "delete-row" }, row === 0, shortcuts.labels.deleteRow),
+      action("col-remove", t("删除列"), { kind: "delete-column" }, layout.columns === 1),
+      { id: "copy", label: t("复制表格"), keepOpen: true, run: () => void copyTable() },
+      { id: "format", label: t("格式化表格源码"), keepOpen: true, run: () => {
         const location = current();
         if (location) rewrite(tableModel(location.table), address, true);
       } },
-      { id: "remove", label: "删除表格", danger: true, keepOpen: true, run: removeTable },
+      { id: "remove", label: t("删除表格"), danger: true, keepOpen: true, run: removeTable },
     );
   }
 
   return <>
     {keySequence.waiting && environment.overlay && createPortal(
-      <div className="notes-key-sequence" role="status">已输入 {editorShortcutPrefix}，等待下一个键</div>, environment.overlay,
+      <div className="notes-key-sequence" role="status">{t("已输入 {prefix}，等待下一个键", { prefix: editorShortcutPrefix })}</div>, environment.overlay,
     )}
-    {active && environment.overlay && createPortal(<div ref={toolbar} className="notes-table-toolbar" role="toolbar" aria-label="表格工具" onMouseDown={event => event.preventDefault()}>
-      <button type="button" aria-label="调整表格大小" title="调整行列数" onClick={event => openPanel("size", active, event)}><Table2 size={15} /></button>
+    {active && environment.overlay && createPortal(<div ref={toolbar} className="notes-table-toolbar" role="toolbar" aria-label={t("表格工具")} onMouseDown={event => event.preventDefault()}>
+      <button type="button" aria-label={t("调整表格大小")} title={t("调整行列数")} onClick={event => openPanel("size", active, event)}><Table2 size={15} /></button>
       {alignments.map(({ value, label, Icon }) => (
-        <button type="button" key={value} aria-label={label} title={label + "当前列"} aria-pressed={layout.align[active.column] === value}
+        <button type="button" key={value} aria-label={label} title={t("{alignment}当前列", { alignment: label })} aria-pressed={layout.align[active.column] === value}
           onClick={() => changeStructure({ kind: "align", alignment: value }, active)}><Icon size={15} /></button>
       ))}
-      <button type="button" aria-label="表格行列操作" title="行列操作" onClick={event => openPanel("actions", active, event)}><MoreHorizontal size={16} /></button>
-      {copyFeedback && <span role="status" className="notes-table-copy-status">{copyFeedback}</span>}
+      <button type="button" aria-label={t("表格行列操作")} title={t("行列操作")} onClick={event => openPanel("actions", active, event)}><MoreHorizontal size={16} /></button>
+      {copyFeedback && <span role="status" className="notes-table-copy-status">{t(copyFeedback)}</span>}
     </div>, environment.overlay)}
     <MarkdownContent value={layout.source} renderTableCell={renderCell} />
-    {panel && <ActionMenu label={panel.kind === "size" ? "调整表格大小" : "表格行列操作"} point={panel.point} anchor={panel.anchor}
+    {panel && <ActionMenu label={panel.kind === "size" ? t("调整表格大小") : t("表格行列操作")} point={panel.point} anchor={panel.anchor}
       className={panel.kind === "size" ? "notes-command-panel" : "notes-table-menu"} dialog={panel.kind === "size"}
-      closeLabel="关闭表格操作" onClose={closePanel} items={panel.kind === "actions" ? actions : [{
-        id: "table-size", content: <MarkdownTableSize initial={{ rows: layout.rows.length, columns: layout.columns }} label="应用尺寸"
+      closeLabel={t("关闭表格操作")} onClose={closePanel} items={panel.kind === "actions" ? actions : [{
+        id: "table-size", content: <MarkdownTableSize initial={{ rows: layout.rows.length, columns: layout.columns }} label={t("应用尺寸")}
           removedCells={size => cellsRemovedByResize(tableModel(layout), size)} onApply={size => changeStructure({ kind: "resize", size }, panel.address)} />,
       }]} />}
   </>;

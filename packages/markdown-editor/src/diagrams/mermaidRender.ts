@@ -1,3 +1,4 @@
+import { MarkdownMessageError, type MarkdownTranslator } from "../core/locale";
 import { mermaidSource } from "./mermaidSource";
 import { applyC4Theme, type C4ThemeDatabase } from "./mermaidC4Theme";
 import { appendDiagramNotes, vennNotes, type CynefinDatabase, type VennDatabase } from "./mermaidDiagramNotes";
@@ -30,7 +31,7 @@ function fixBlockIntersections(database: BlockDatabase) {
       // Diamond and similar shapes call this.calcIntersect with the original
       // shape as an argument; delegate to it when that receiver has been lost.
       block.calcIntersect = (shape, point) => {
-        if (typeof shape.calcIntersect !== "function" || shape === block) throw new Error("块图节点的连线计算失败");
+        if (typeof shape.calcIntersect !== "function" || shape === block) throw new MarkdownMessageError("块图节点的连线计算失败");
         return shape.calcIntersect.call(shape, shape, point);
       };
       // The edge graph copies intersect again. Keep the layout receiver even
@@ -49,7 +50,7 @@ function fixBlockIntersections(database: BlockDatabase) {
   blockDatabases.add(database);
 }
 
-export function renderMermaid(code: string, id: string, theme: string, active: () => boolean) {
+export function renderMermaid(code: string, id: string, theme: string, t: MarkdownTranslator, active: () => boolean) {
   const draw = async () => {
     const [{ default: mermaid }, { default: purify }] = await Promise.all([
       import("mermaid"),
@@ -57,7 +58,7 @@ export function renderMermaid(code: string, id: string, theme: string, active: (
     ]);
     if (!active()) return "";
     const text = mermaidSource(code);
-    if (text.length > 50000) throw new Error("图表内容过长，请缩小图表后预览。");
+    if (text.length > 50000) throw new MarkdownMessageError("图表内容过长，请缩小图表后预览。");
     const header = text.replace(/\r\n?/g, "\n").split("\n").find((line) => line.trim() && !line.trimStart().startsWith("%%")) ?? "";
     mermaid.initialize({
       startOnLoad: false,
@@ -143,6 +144,9 @@ export function renderMermaid(code: string, id: string, theme: string, active: (
     else if (railroadDatabase) {
       const captured = await withRailroadText(railroadDatabase, render);
       result = captured.value; railroadData = captured.database;
+    } else if (/^\s*eventmodeling\b/i.test(header)) {
+      const { withEventModelText } = await import("./mermaidEventModel");
+      result = await withEventModelText(render, t);
     } else result = await render();
     const safe = purify.sanitize(result.svg, {
       USE_PROFILES: { svg: true, svgFilters: true },
@@ -151,23 +155,23 @@ export function renderMermaid(code: string, id: string, theme: string, active: (
     });
     const doc = new DOMParser().parseFromString(safe, "image/svg+xml");
     if (doc.documentElement.localName !== "svg" || doc.querySelector("parsererror"))
-      throw new Error("图表未能生成有效的 SVG");
+      throw new MarkdownMessageError("图表未能生成有效的 SVG");
     if (c4Database) applyC4Theme(doc.documentElement, c4Database, theme === "dark");
     if (vennDatabase) appendDiagramNotes(doc.documentElement, vennNotes(vennDatabase), theme === "dark");
     if (cynefinDatabase) appendDiagramNotes(doc.documentElement, (cynefinDatabase.getDomains().get("confusion")?.items.slice(3) ?? [])
       .map((item) => ({ context: "Confusion", label: item.label })), theme === "dark");
     if (wardleyDatabase) {
-      fitWardleyLabels(doc.documentElement, theme === "dark", wardleyDatabase.getWardleyData());
-      appendDiagramNotes(doc.documentElement, wardleyNotes(wardleyDatabase.getWardleyData(), wardleyDatabase.getDiagramTitle(), wardleyDatabase.getAccDescription()), theme === "dark");
+      fitWardleyLabels(doc.documentElement, theme === "dark", wardleyDatabase.getWardleyData(), t);
+      appendDiagramNotes(doc.documentElement, wardleyNotes(wardleyDatabase.getWardleyData(), wardleyDatabase.getDiagramTitle(), wardleyDatabase.getAccDescription(), t), theme === "dark");
     }
     if (railroadData) {
       prependRailroadTitle(doc.documentElement, railroadData.getTitle(), theme === "dark");
-      appendDiagramNotes(doc.documentElement, railroadNotes(railroadData, /^\s*railroad-peg-beta\b/i.test(header), code), theme === "dark");
+      appendDiagramNotes(doc.documentElement, railroadNotes(railroadData, /^\s*railroad-peg-beta\b/i.test(header), code, t), theme === "dark");
     }
-    if (agentflowDatabase) appendDiagramNotes(doc.documentElement, agentflowNotes(agentflowDatabase.getSemanticModel()), theme === "dark");
+    if (agentflowDatabase) appendDiagramNotes(doc.documentElement, agentflowNotes(agentflowDatabase.getSemanticModel(), t), theme === "dark");
     if (sequenceDatabase) {
       const decoder = document.createElement("textarea");
-      appendDiagramNotes(doc.documentElement, sequenceNotes(sequenceDatabase, (value) => sequenceLiteralText(value, (encoded) => { decoder.innerHTML = encoded; return decoder.value; })), theme === "dark");
+      appendDiagramNotes(doc.documentElement, sequenceNotes(sequenceDatabase, (value) => sequenceLiteralText(value, (encoded) => { decoder.innerHTML = encoded; return decoder.value; }), true, t), theme === "dark");
     }
     if (/^\s*usecase-beta\b/.test(header)) {
       // Actor variants and stereotypes share their CSS class with the shape.

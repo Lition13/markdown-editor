@@ -1,3 +1,4 @@
+import { MarkdownMessageError } from "../core/locale";
 import { wrapDiagramText } from "./diagramText";
 
 export interface VennArea { sets: string[]; size: number; label?: string }
@@ -27,7 +28,7 @@ export function vennNotes(db: VennDatabase): DiagramNote[] {
 export function appendDiagramNotes(svg: Element, notes: DiagramNote[], dark: boolean) {
   if (!notes.length) return;
   const [x, y, width, height] = (svg.getAttribute("viewBox") ?? "").trim().split(/[ ,]+/).map(Number);
-  if (![x, y, width, height].every(Number.isFinite) || width < 80 || height < 1) throw new Error("图表说明区域尺寸无效。");
+  if (![x, y, width, height].every(Number.isFinite) || width < 80 || height < 1) throw new MarkdownMessageError("图表说明区域尺寸无效。");
   const doc = svg.ownerDocument, ns = "http://www.w3.org/2000/svg", group = doc.createElementNS(ns, "g");
   group.setAttribute("class", "diagram-notes");
   let top = y + height + 22;
@@ -45,7 +46,7 @@ export function appendDiagramNotes(svg: Element, notes: DiagramNote[], dark: boo
     top += 12;
   }
   const nextHeight = top - y + 8;
-  if (nextHeight > 12000) throw new Error("图表说明过多，请分成多个图表预览。");
+  if (nextHeight > 12000) throw new MarkdownMessageError("图表说明过多，请分成多个图表预览。");
   svg.appendChild(group); svg.setAttribute("viewBox", `${x} ${y} ${width} ${nextHeight}`);
   if (/^\d+(?:\.\d+)?$/.test(svg.getAttribute("height") ?? "")) svg.setAttribute("height", String(nextHeight));
 }

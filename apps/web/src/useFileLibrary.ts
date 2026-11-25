@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  addFiles, addFolder, exampleFile, fileEntry, folderRemoval, movedFile, movedFolder, moveFile, moveFolder, newFiles, newFolder,
+  addFiles, addFolder, exampleFile, FileLibraryError, fileEntry, folderRemoval, movedFile, movedFolder, moveFile, moveFolder, newFiles, newFolder,
   openFile, readLibrary, removeFile, removeFolder, renamedFile, renamedFolder, renameFile, renameFolder,
   saveContent, sortByName, type FileEntry, type FileInput, type FolderEntry, type MarkdownFile,
 } from "./files";
+import type { WebMessage } from "./locale";
 
 interface PendingEdit {
   value: string;
@@ -17,7 +18,7 @@ export function useFileLibrary() {
   const [current, setCurrent] = useState<MarkdownFile | null>(null);
   const [ready, setReady] = useState(false);
   const [sessionOnly, setSessionOnly] = useState(false);
-  const [progress, setProgress] = useState<Partial<Record<string, string | null>>>({});
+  const [progress, setProgress] = useState<Partial<Record<string, WebMessage | null>>>({});
   const active = useRef<MarkdownFile | null>(null);
   const memory = useRef<Map<string, string> | null>(null);
   const pending = useRef(new Map<string, PendingEdit>());
@@ -51,7 +52,7 @@ export function useFileLibrary() {
     return () => { mounted = false; };
   }, []);
 
-  function markSave(id: string, state: string | null | undefined) {
+  function markSave(id: string, state: WebMessage | null | undefined) {
     setProgress(previous => {
       const next = { ...previous };
       if (state === undefined) delete next[id];
@@ -75,8 +76,7 @@ export function useFileLibrary() {
       markSave(id, undefined);
     } catch (error) {
       if (pending.current.get(id) !== edit) return;
-      const message = error instanceof Error && !(error instanceof DOMException)
-        ? error.message : "保存失败，可导出当前内容。";
+      const message = error instanceof FileLibraryError ? error.label : "保存失败，可导出当前内容。";
       markSave(id, message);
     } finally {
       edit.saving = false;
@@ -182,7 +182,7 @@ export function useFileLibrary() {
 
   const activeSave = current ? progress[current.id] : undefined;
   const unsavedIds = Object.keys(progress).filter(id => typeof progress[id] === "string");
-  let status = "已保存到此浏览器";
+  let status: WebMessage = "已保存到此浏览器";
   if (!ready) status = "正在读取文件…";
   else if (sessionOnly) status = "浏览器存储不可用，关闭页面前可导出文件";
   else if (typeof activeSave === "string") status = activeSave;

@@ -86,6 +86,7 @@ export function wrapInline(
 export function wrapInlineCode(
   value: string,
   range: TextSelection,
+  placeholder = "代码",
 ): MarkdownEdit {
   const s = clampSelection(value, range),
     selected = value.slice(s.start, s.end);
@@ -109,7 +110,7 @@ export function wrapInlineCode(
       code = code.slice(1, -1);
     return replaceSelection(value, s, code);
   }
-  const code = selected || "代码",
+  const code = selected || placeholder,
     longest = [...code.matchAll(/`+/g)].reduce(
       (n, m) => Math.max(n, m[0].length),
       0,
@@ -261,8 +262,9 @@ export function insertCodeBlock(
   value: string,
   range: TextSelection,
   language = "text",
+  placeholder = "代码",
 ): MarkdownEdit {
-  const selected = value.slice(range.start, range.end) || "代码";
+  const selected = value.slice(range.start, range.end) || placeholder;
   const longest = [...selected.matchAll(/`+/g)].reduce(
     (n, m) => Math.max(n, m[0].length),
     0,
@@ -403,7 +405,7 @@ export function isMarkdownIndentContext(value: string, range: TextSelection) {
     1
   );
 }
-export function taskMarker(value: string, offset: number | undefined) {
+export function taskMarker(value: string, offset: number | undefined, placeholder = "待办事项") {
   if (offset === undefined || offset < 0 || offset > value.length) return null;
   const match = /^[\t ]*(?:[-+*]|\d+[.)])[\t ]+(\[[ xX]\])(?:[\t ]+|(?=\n|$))/.exec(
     value.slice(offset),
@@ -416,7 +418,7 @@ export function taskMarker(value: string, offset: number | undefined) {
     start,
     end: start + 1,
     checked: /x/i.test(match[1]),
-    label: line.trim().slice(0, 120) || "待办事项",
+    label: line.trim().slice(0, 120) || placeholder,
   };
 }
 export function toggleMarkdownTask(

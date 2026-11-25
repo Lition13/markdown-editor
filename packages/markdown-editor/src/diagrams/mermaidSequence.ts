@@ -1,3 +1,4 @@
+import { MarkdownMessageError, markdownTranslator } from "../core/locale";
 import type { DiagramNote } from "./mermaidDiagramNotes";
 
 export interface SequenceDatabase {
@@ -15,21 +16,23 @@ export function sequenceBoxText(source: string, validColor: (color: string) => b
 }
 
 export function sequenceNumber(value: number) {
-  if (!Number.isFinite(value)) throw new Error("时序编号包含无效数值。");
+  if (!Number.isFinite(value)) throw new MarkdownMessageError("时序编号包含无效数值。");
   return String(Math.round((value + Number.EPSILON) * 100) / 100);
 }
 
-export function sequenceNotes(database: SequenceDatabase, labelText: (value: string) => string, includeEmptyBoxes = true): DiagramNote[] {
+export function sequenceNotes(database: SequenceDatabase, labelText: (value: string) => string, includeEmptyBoxes = true, t = markdownTranslator()): DiagramNote[] {
   const notes: DiagramNote[] = [];
-  if (includeEmptyBoxes) for (const group of database.getBoxes()) if (!group.actorKeys.length && group.name) notes.push({ context: "参与者分组", label: labelText(group.name) + "（暂无参与者）" });
+  if (includeEmptyBoxes) for (const group of database.getBoxes()) if (!group.actorKeys.length && group.name) notes.push({
+    context: t("参与者分组"), label: t("{label}（暂无参与者）", { label: labelText(group.name) }),
+  });
   for (const actor of database.getActors().values()) {
-    const context = "参与者 · " + labelText(actor.description || actor.name);
+    const context = t("参与者") + " · " + labelText(actor.description || actor.name);
     for (const [field, values] of [["链接", actor.links], ["属性", actor.properties]] as const) {
       for (const [name, value] of Object.entries(values ?? {})) if (!["__proto__", "constructor", "prototype"].includes(name)) notes.push({
-        context: context + " · " + field + " · " + labelText(name), label: labelText(typeof value === "string" ? value : JSON.stringify(value) ?? String(value)),
+        context: context + " · " + t(field) + " · " + labelText(name), label: labelText(typeof value === "string" ? value : JSON.stringify(value) ?? String(value)),
       });
     }
-    if (actor.detailReference) notes.push({ context: context + " · 资料引用", label: labelText(actor.detailReference) });
+    if (actor.detailReference) notes.push({ context: context + " · " + t("资料引用"), label: labelText(actor.detailReference) });
   }
   return notes;
 }

@@ -492,6 +492,105 @@ test("用主题源码新建并复制具名主题，多个主题刷新后仍能�
   await expect(profiles.getByRole("option", { name: "深海", exact: true })).toHaveCount(1);
 });
 
+test("在线版切换中英文后保留文档、撤销历史和浏览器偏好", async ({ page }) => {
+  await page.goto("./");
+  const root = page.locator("html");
+  await expect(root).toHaveAttribute("lang", "zh-CN");
+  const files = await fileManager(page);
+  const original = "# 保留标题\n\n中文和 English 正文。";
+  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+    name: "验收笔记.md", mimeType: "text/markdown", buffer: Buffer.from(original),
+  });
+  const toolbar = await revealToolbar(page);
+  await toolbar.getByRole("button", { name: "源码", exact: true }).click();
+  const draft = original + "\n\n临时输入";
+  await page.getByRole("textbox", { name: "Markdown 正文", exact: true }).fill(draft);
+  await revealToolbar(page);
+  await toolbar.getByRole("combobox", { name: "界面语言", exact: true }).selectOption("en");
+  await expect(root).toHaveAttribute("lang", "en");
+  await expect(page).toHaveTitle("Markdown Editor");
+  await expect(files.getByRole("heading", { name: "File manager", exact: true })).toBeVisible();
+  await expect(files.getByRole("button", { name: "验收笔记.md", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Document outline", exact: true })).toBeVisible();
+  await expect(page.locator("#document-outline").getByRole("button", { name: "保留标题", exact: true })).toBeVisible();
+  const source = page.getByRole("textbox", { name: "Markdown document", exact: true });
+  await expect(source).toHaveValue(draft);
+  await source.press("Control+z");
+  await expect(source).toHaveValue(original);
+  await expect(page.getByRole("group", { name: "Document statistics", exact: true })).toContainText("3 lines");
+  await expect(page.locator(".save-status")).toHaveText("Saved in this browser");
+
+  await files.getByRole("button", { name: "New folder", exact: true }).click();
+  await files.getByLabel("Folder name", { exact: true }).fill("/");
+  await files.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(files.getByRole("alert")).toHaveText("Enter a valid folder name without slashes.");
+  await files.getByRole("button", { name: "Cancel", exact: true }).click();
+
+  await page.reload();
+  await expect(root).toHaveAttribute("lang", "en");
+  await expect(page.getByRole("heading", { name: "保留标题", exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 320, height: 620 });
+  await page.getByRole("button", { name: "Top toolbar", exact: true }).hover();
+  const language = toolbar.getByRole("combobox", { name: "Interface language", exact: true });
+  await expect(language).toBeInViewport({ ratio: 1 });
+  await expect(language).toHaveValue("en");
+  await language.selectOption("zh-CN");
+  await expect(root).toHaveAttribute("lang", "zh-CN");
+  await expect(page).toHaveTitle("Markdown 编辑器");
+});
+
+test("英文覆盖快捷键、主题、斜杠菜单和全屏内的编辑工具", async ({ page }) => {
+  await page.goto("./");
+  const files = await fileManager(page);
+  const document = "# 流程\n\n~~~mermaid\neventmodeling\ntf 01 evt Shop.Saved\n~~~\n\n~~~text\nplain example\n~~~\n\n结尾";
+  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+    name: "tools.md", mimeType: "text/markdown", buffer: Buffer.from(document),
+  });
+  const toolbar = await revealToolbar(page);
+  await toolbar.getByRole("combobox", { name: "界面语言", exact: true }).selectOption("en");
+  const top = page.getByRole("button", { name: "Top toolbar", exact: true });
+  await top.hover();
+  await toolbar.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click();
+  const shortcuts = page.getByRole("dialog", { name: "Keyboard shortcuts", exact: true });
+  await shortcuts.getByRole("searchbox", { name: "Search shortcuts", exact: true }).fill("Insert table");
+  await shortcuts.getByRole("button", { name: "Change Insert table", exact: true }).click();
+  await shortcuts.getByRole("textbox", { name: "Key combination", exact: true }).fill("Ctrl+T");
+  await expect(shortcuts.getByText("The browser reserves this shortcut for opening a new tab.")).toBeVisible();
+  await shortcuts.getByRole("button", { name: "Close keyboard shortcuts", exact: true }).click();
+
+  await top.hover();
+  await toolbar.getByRole("button", { name: "Custom themes", exact: true }).click();
+  const themes = page.getByRole("dialog", { name: "Custom themes", exact: true });
+  await expect(themes.getByLabel("Theme name", { exact: true })).toHaveValue("My theme");
+  await themes.getByRole("button", { name: "Theme source", exact: true }).click();
+  await themes.getByLabel("JSON source", { exact: true }).fill("{");
+  await expect(themes.getByText("Enter valid JSON.", { exact: true })).toBeVisible();
+  await themes.getByRole("button", { name: "Cancel", exact: true }).click();
+
+  const chart = page.getByRole("img", { name: "Mermaid diagram", exact: true });
+  await expect(chart).toContainText("Event model");
+  await expect(chart).toContainText("Shop.Saved");
+  await top.hover();
+  await toolbar.getByRole("button", { name: "Fullscreen editor", exact: true }).click();
+  const fullscreen = page.getByRole("dialog", { name: "Edit Markdown", exact: true });
+  const editor = fullscreen.getByRole("textbox", { name: "Markdown document", exact: true });
+  await fullscreen.getByText("plain example", { exact: true }).click();
+  const code = fullscreen.getByRole("combobox", { name: "Code block language", exact: true });
+  await expect(code).toHaveValue("Plain text");
+  await expect(fullscreen.locator(".cm-md-code-settings").getByRole("button", { name: "Copy code", exact: true })).toBeVisible();
+  await editor.press("Control+End");
+  await editor.press("/");
+  const tools = fullscreen.getByRole("menu", { name: "Editing tools", exact: true });
+  await tools.getByRole("textbox", { name: "Search editing tools", exact: true }).fill("Insert table");
+  await tools.getByRole("menuitem", { name: "Insert table", exact: true }).click();
+  const insert = fullscreen.getByRole("dialog", { name: "Insert table", exact: true });
+  await expect(insert.getByRole("spinbutton", { name: "Rows (including header)", exact: true })).toBeFocused();
+  await expect(insert.getByRole("spinbutton", { name: "Columns", exact: true })).toBeVisible();
+  await insert.getByRole("button", { name: "Close insert panel", exact: true }).click();
+  await fullscreen.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(fullscreen).toBeHidden();
+});
+
 test("文件栏、大纲和顶栏在刷新与重新打开后恢复显隐", async ({ page, context }) => {
   await page.goto("./");
   const toolbar = page.locator("#workbench-toolbar");

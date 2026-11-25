@@ -8,6 +8,7 @@ import MarkdownContent from "./MarkdownContent";
 import { copyMarkdownText, resolveMarkdownLink } from "./editorContext";
 import { WidgetEnvironment, widgetEnvironment } from "./widgetEnvironment";
 import { markdownLink, taskMarker } from "../core/markdown";
+import type { MarkdownTranslator } from "../core/locale";
 import { markdownParser } from "../core/markdownAst";
 import { markdownListPrefix } from "../core/markdownList";
 import { highlightCode, readCodeFence, type CodeFence } from "../core/markdownCode";
@@ -72,11 +73,12 @@ const projectionFocus = StateEffect.define<boolean>();
 const languagePickers = new WeakMap<HTMLElement, ReturnType<typeof createCodeLanguagePicker>>();
 
 class CodeLanguageField extends WidgetType {
-  constructor(readonly fence: CodeFence) { super(); }
+  constructor(readonly fence: CodeFence, readonly t: MarkdownTranslator) { super(); }
   eq(other: CodeLanguageField) {
-    return this.fence.languageFrom === other.fence.languageFrom && this.fence.language === other.fence.language;
+    return this.fence.languageFrom === other.fence.languageFrom && this.fence.language === other.fence.language && this.t === other.t;
   }
   toDOM(view: EditorView) {
+    const { t } = this;
     const { language, languageFrom, languageTo } = this.fence;
     const preview = (next: string) => {
       const draft = view.state.field(projection).codeLanguage;
@@ -100,7 +102,7 @@ class CodeLanguageField extends WidgetType {
       if (next !== null && next !== language && view.state.sliceDoc(languageFrom, languageTo) === language) {
         view.dispatch({ changes: { from: languageFrom, to: languageTo, insert: next }, effects, userEvent: "input.code-language" });
       } else view.dispatch({ effects });
-    }, () => view.state.facet(widgetEnvironment).getSnapshot().topInset);
+    }, () => view.state.facet(widgetEnvironment).getSnapshot().topInset, t);
     const action = (label: string, text: string) => {
       const button = picker.footer.ownerDocument.createElement("button");
       button.type = "button";
@@ -111,7 +113,7 @@ class CodeLanguageField extends WidgetType {
       button.addEventListener("focus", () => preview(language));
       return button;
     };
-    const copy = action("复制代码", "复制");
+    const copy = action(t("复制代码"), t("复制"));
     let copyFeedback: ReturnType<typeof setTimeout> | undefined;
     copy.addEventListener("click", async () => {
       const node = markdownBlockAt(view.state, this.fence.from);
@@ -119,14 +121,15 @@ class CodeLanguageField extends WidgetType {
       try {
         await copyMarkdownText(node.value, view.state.facet(widgetEnvironment).getSnapshot());
         if (!copy.isConnected) return;
-        copy.textContent = "已复制";
+        copy.textContent = t("已复制");
         clearTimeout(copyFeedback);
-        copyFeedback = setTimeout(() => { copy.textContent = "复制"; }, 1800);
+        copyFeedback = setTimeout(() => { copy.textContent = t("复制"); }, 1800);
       } catch {
-        if (copy.isConnected) copy.textContent = "复制失败";
+        if (copy.isConnected) copy.textContent = t("复制失败");
       }
     });
-    const leave = action("继续正文", "继续正文");
+    const leaveLabel = t("继续正文");
+    const leave = action(leaveLabel, leaveLabel);
     leave.addEventListener("click", () => {
       const fence = codeFenceAt(view.state, this.fence.from);
       if (!fence) return;
@@ -200,7 +203,7 @@ class TaskMarker extends WidgetType {
     input.type = "checkbox";
     input.checked = this.checked;
     input.className = "cm-md-task-checkbox";
-    input.setAttribute("aria-label", `Markdown 待办：${this.label}`);
+    input.setAttribute("aria-label", this.label);
     input.addEventListener("change", () => {
       const from = view.posAtDOM(input);
       const text = view.state.sliceDoc(from, from + 3);
@@ -229,6 +232,7 @@ function isStandaloneInlineBlock(node: RootContent) {
 }
 
 function project(state: EditorState, tree: Root, focused: boolean, codeLanguage: CodeLanguageDraft | null) {
+  const { t, normalizeLink } = state.facet(widgetEnvironment).getSnapshot();
   const source = state.doc.toString();
   const caret = focused ? state.selection.main : null;
   const definitions = new Map<string, string>();
@@ -304,7 +308,7 @@ function project(state: EditorState, tree: Root, focused: boolean, codeLanguage:
           // A legacy empty block has no body line. Keep an edit position before its closer.
           syntax(end, to, false);
           line(end, "cm-md-code-line cm-md-code-first cm-md-code-last");
-          decorations.push(Decoration.widget({ widget: new CodeLanguageField(fence), block: true, side: 1 }).range(to));
+          decorations.push(Decoration.widget({ widget: new CodeLanguageField(fence, t), block: true, side: 1 }).range(to));
         } else {
           const first = state.doc.lineAt(fence.bodyFrom).number;
           const last = state.doc.lineAt(bodyEnd).number;
@@ -317,7 +321,7 @@ function project(state: EditorState, tree: Root, focused: boolean, codeLanguage:
             mark(fence.bodyFrom + token.from, fence.bodyFrom + token.to, token.className);
           }
           line(end, "cm-md-code-separator");
-          replace(end, to, new CodeLanguageField(fence), true);
+          replace(end, to, new CodeLanguageField(fence, t), true);
         }
         return;
       }
@@ -335,7 +339,7 @@ function project(state: EditorState, tree: Root, focused: boolean, codeLanguage:
     }
     if (node.type === "definition" || node.type === "footnoteDefinition") {
       if (!show) {
-        const label = node.type === "definition" ? `链接定义 · ${node.label || node.identifier}` : `注释 · ${node.label || node.identifier}`;
+        const label = t(node.type === "definition" ? "链接定义 · {label}" : "注释 · {label}", { label: node.label || node.identifier });
         replace(from, to, new VisibleMarker(label, "cm-md-definition"), topLevel);
         return;
       }
@@ -346,7 +350,7 @@ function project(state: EditorState, tree: Root, focused: boolean, codeLanguage:
     }
     if ((node.type === "image" || node.type === "imageReference") && !show && !raw.includes("\n")) {
       const url = node.type === "imageReference" ? definitions.get(node.identifier) : undefined;
-      const image = node.type === "image" ? raw : url && markdownLink(node.alt ?? "图片", url, true);
+      const image = node.type === "image" ? raw : url && markdownLink(node.alt ?? t("图片"), url, true);
       if (image) {
         replace(from, to, new RenderedMarkdown(image, false));
         return;
@@ -387,12 +391,12 @@ function project(state: EditorState, tree: Root, focused: boolean, codeLanguage:
       if (marker) {
         const end = from + marker.length;
         // GFM leaves checked unset until an item has text after the checkbox.
-        const task = taskMarker(source, from);
+        const task = taskMarker(source, from, t("待办事项"));
         const markerEnd = task ? task.end + 1 : end;
         const showMarker = !!caret && from <= caret.from && caret.from < markerEnd;
         if (task && !showMarker) {
           syntax(from, end, false);
-          replace(task.start - 1, task.end + 1, new TaskMarker(task.checked, task.label));
+          replace(task.start - 1, task.end + 1, new TaskMarker(task.checked, t("Markdown 待办：{label}", { label: task.label })));
         } else if (showMarker) {
           syntax(from, task ? task.end + 1 : end, true);
         } else {
@@ -422,9 +426,9 @@ function project(state: EditorState, tree: Root, focused: boolean, codeLanguage:
       syntax(end, to, show || source.slice(end, to).includes("\n"));
       if (node.type === "link" || node.type === "linkReference") {
         const url = node.type === "link" ? node.url : definitions.get(node.identifier);
-        const href = url && resolveMarkdownLink(url, state.facet(widgetEnvironment).getSnapshot().normalizeLink);
+        const href = url && resolveMarkdownLink(url, normalizeLink);
         if (start < end && href) {
-          decorations.push(Decoration.mark({ tagName: "a", class: "cm-md-link", attributes: { href, title: "按住 Ctrl 单击打开链接" } }).range(start, end));
+          decorations.push(Decoration.mark({ tagName: "a", class: "cm-md-link", attributes: { href, title: t("按住 Ctrl 单击打开链接") } }).range(start, end));
         } else mark(start, end, "cm-md-link");
       } else mark(start, end, textStyles[node.type]);
     }

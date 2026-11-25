@@ -1,4 +1,9 @@
 import { example } from "./example";
+import type { WebMessage } from "./locale";
+
+export class FileLibraryError extends Error {
+  constructor(readonly label: WebMessage) { super(label); }
+}
 
 export interface FileEntry {
   id: string;
@@ -47,16 +52,16 @@ export function sortByName<T extends { name: string }>(entries: T[]) {
   return [...entries].sort((left, right) => nameOrder.compare(left.name, right.name));
 }
 
-function cleanName(input: string, kind: "文件" | "文件夹") {
+function cleanName(input: string, kind: "file" | "folder") {
   const name = input.trim();
   if (!name || /^\.+$/.test(name) || /[/\\]/.test(name)) {
-    throw new Error("请输入有效的" + kind + "名称，名称不能包含斜杠。");
+    throw new FileLibraryError(kind === "file" ? "请输入有效的文件名称，名称不能包含斜杠。" : "请输入有效的文件夹名称，名称不能包含斜杠。");
   }
   return name;
 }
 
 export function markdownName(input: string) {
-  const name = cleanName(input, "文件");
+  const name = cleanName(input, "file");
   return /\.(?:md|markdown|txt)$/i.test(name) ? name : name + ".md";
 }
 
@@ -88,34 +93,34 @@ export function newFiles(inputs: FileInput[], existing: FileEntry[], folderId: s
 
 export function renamedFile(files: FileEntry[], id: string, input: string): FileEntry {
   const file = files.find(file => file.id === id);
-  if (!file) throw new Error("这个文件已被移除。");
+  if (!file) throw new FileLibraryError("这个文件已被移除。");
   const name = markdownName(input);
   if (files.some(other => other.id !== id && (other.folderId ?? null) === (file.folderId ?? null) && nameKey(other.name) === nameKey(name))) {
-    throw new Error("已有同名文件，请换一个名称。");
+    throw new FileLibraryError("已有同名文件，请换一个名称。");
   }
   return { ...file, name };
 }
 
 export function newFolder(folders: FolderEntry[], input: string, parentId: string | null): FolderEntry {
-  if (parentId !== null && !folders.some(folder => folder.id === parentId)) throw new Error("上一级文件夹已被移除。");
+  if (parentId !== null && !folders.some(folder => folder.id === parentId)) throw new FileLibraryError("上一级文件夹已被移除。");
   const names = new Set(folders.filter(folder => folder.parentId === parentId).map(folder => nameKey(folder.name)));
-  const name = reserveName(cleanName(input, "文件夹"), "", names);
+  const name = reserveName(cleanName(input, "folder"), "", names);
   return { id: crypto.randomUUID(), name, parentId };
 }
 
 export function renamedFolder(folders: FolderEntry[], id: string, input: string): FolderEntry {
   const folder = folders.find(folder => folder.id === id);
-  if (!folder) throw new Error("这个文件夹已被移除。");
-  const name = cleanName(input, "文件夹");
+  if (!folder) throw new FileLibraryError("这个文件夹已被移除。");
+  const name = cleanName(input, "folder");
   if (folders.some(other => other.id !== id && other.parentId === folder.parentId && nameKey(other.name) === nameKey(name))) {
-    throw new Error("已有同名文件夹，请换一个名称。");
+    throw new FileLibraryError("已有同名文件夹，请换一个名称。");
   }
   return { ...folder, name };
 }
 
 export function movedFile(files: FileEntry[], id: string, folderId: string | null): FileEntry {
   const file = files.find(file => file.id === id);
-  if (!file) throw new Error("这个文件已被移除。");
+  if (!file) throw new FileLibraryError("这个文件已被移除。");
   if ((file.folderId ?? null) === folderId) return file;
   return { ...file, folderId, name: reserveFileName(file.name, namesInFolder(files, folderId)) };
 }
@@ -130,17 +135,17 @@ export function containsFolder(folders: Map<string, FolderEntry>, ancestorId: st
 export function movedFolder(folders: FolderEntry[], id: string, parentId: string | null): FolderEntry {
   const entries = new Map(folders.map(folder => [folder.id, folder]));
   const folder = entries.get(id);
-  if (!folder) throw new Error("这个文件夹已被移除。");
+  if (!folder) throw new FileLibraryError("这个文件夹已被移除。");
   if (folder.parentId === parentId) return folder;
-  if (parentId !== null && !entries.has(parentId)) throw new Error("目标文件夹已被移除。");
-  if (containsFolder(entries, id, parentId)) throw new Error("不能把文件夹移到自身或子文件夹。");
+  if (parentId !== null && !entries.has(parentId)) throw new FileLibraryError("目标文件夹已被移除。");
+  if (containsFolder(entries, id, parentId)) throw new FileLibraryError("不能把文件夹移到自身或子文件夹。");
   const names = new Set(folders.filter(other => other.parentId === parentId).map(other => nameKey(other.name)));
   return { ...folder, parentId, name: reserveName(folder.name, "", names) };
 }
 
 export function folderRemoval(folders: FolderEntry[], files: FileEntry[], id: string) {
   const removed = folders.find(folder => folder.id === id);
-  if (!removed) throw new Error("这个文件夹已被移除。");
+  if (!removed) throw new FileLibraryError("这个文件夹已被移除。");
   const folderNames = new Set(folders.filter(folder => folder.parentId === removed.parentId && folder.id !== id).map(folder => nameKey(folder.name)));
   const fileNames = namesInFolder(files, removed.parentId);
   const movedFolders = folders.filter(folder => folder.parentId === id).map(folder => ({
@@ -193,7 +198,7 @@ function database() {
     request.onerror = () => reject(request.error);
     request.onblocked = () => {
       blocked = true;
-      reject(new Error("文件存储正在其他页面中使用。"));
+      reject(new FileLibraryError("文件存储正在其他页面中使用。"));
     };
     request.onsuccess = () => {
       const db = request.result;
@@ -227,7 +232,7 @@ async function transaction<T>(mode: IDBTransactionMode, action: (tx: IDBTransact
   const tx = db.transaction([filesStore, textStore, settingsStore, foldersStore], mode);
   const done = new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve();
-    tx.onabort = () => reject(tx.error ?? new Error("文件操作中断，请重试。"));
+    tx.onabort = () => reject(tx.error ?? new FileLibraryError("文件操作中断，请重试。"));
   });
   try {
     const [result] = await Promise.all([action(tx), done]);
@@ -241,7 +246,7 @@ async function transaction<T>(mode: IDBTransactionMode, action: (tx: IDBTransact
 
 async function withText(tx: IDBTransaction, entry: FileEntry): Promise<MarkdownFile> {
   const value = await read<string | undefined>(tx.objectStore(textStore).get(entry.id));
-  if (value === undefined) throw new Error("无法读取此文件的内容。");
+  if (value === undefined) throw new FileLibraryError("无法读取此文件的内容。");
   const unchangedExample = entry.id === exampleFile.id && entry.name === exampleFile.name
     && entry.revision === 0 && previousExamples.has(value);
   return { ...entry, value: unchangedExample ? example.value : value };
@@ -263,7 +268,7 @@ export function readLibrary(): Promise<FileLibrary> {
 export function openFile(id: string): Promise<MarkdownFile> {
   return transaction("readwrite", async tx => {
     const entry = await read<FileEntry | undefined>(tx.objectStore(filesStore).get(id));
-    if (!entry) throw new Error("这个文件已被移除。");
+    if (!entry) throw new FileLibraryError("这个文件已被移除。");
     const file = await withText(tx, entry);
     tx.objectStore(settingsStore).put(id, activeKey);
     return file;
@@ -272,7 +277,7 @@ export function openFile(id: string): Promise<MarkdownFile> {
 
 async function confirmFolder(tx: IDBTransaction, folderId: string | null) {
   if (folderId !== null && !await read(tx.objectStore(foldersStore).getKey(folderId))) {
-    throw new Error("目标文件夹已被移除。");
+    throw new FileLibraryError("目标文件夹已被移除。");
   }
 }
 
@@ -375,8 +380,8 @@ export function saveContent(id: string, value: string, revision: number): Promis
   return transaction("readwrite", async tx => {
     const store = tx.objectStore(filesStore);
     const file = await read<FileEntry | undefined>(store.get(id));
-    if (!file) throw new Error("文件已在另一个页面中删除。可导出当前内容。");
-    if (file.revision !== revision) throw new Error("文件已在另一个页面中修改。可导出当前内容。");
+    if (!file) throw new FileLibraryError("文件已在另一个页面中删除。可导出当前内容。");
+    if (file.revision !== revision) throw new FileLibraryError("文件已在另一个页面中修改。可导出当前内容。");
     const next = revision + 1;
     tx.objectStore(textStore).put(value, id);
     store.put({ ...file, revision: next });

@@ -1,4 +1,5 @@
-import { codeLanguageId, codeLanguages, matchCodeLanguage, suggestCodeLanguages, type CodeLanguage } from "../core/markdownCode";
+import type { MarkdownTranslator } from "../core/locale";
+import { codeLanguageId, codeLanguageLabel, codeLanguages, matchCodeLanguage, suggestCodeLanguages, type CodeLanguage } from "../core/markdownCode";
 
 const languageMarks: Record<string, [string, string]> = {
   bash: ["$", "#27866c"], c: ["C", "#5571ce"], cpp: ["C++", "#5571ce"],
@@ -23,22 +24,23 @@ function badgeFor(id: string) {
   return badge;
 }
 
-export function codeLanguageOption(language: CodeLanguage, current = false) {
+export function codeLanguageOption(language: CodeLanguage, t: MarkdownTranslator, current = false) {
+  const label = codeLanguageLabel(language, t);
   const option = document.createElement("button");
   option.type = "button";
   option.tabIndex = -1;
   option.className = "notes-code-language-option";
   option.setAttribute("role", "option");
-  option.setAttribute("aria-label", language.label);
+  option.setAttribute("aria-label", label);
 
   const name = document.createElement("span");
   name.className = "notes-code-language-name";
-  name.textContent = language.label;
+  name.textContent = label;
   const detail = document.createElement("span");
   detail.className = "notes-code-language-alias";
   detail.setAttribute("aria-hidden", "true");
   const shortcut = language.aliases[0] || language.id;
-  detail.textContent = shortcut.toLowerCase() === language.label.toLowerCase() ? "" : shortcut;
+  detail.textContent = shortcut.toLowerCase() === label.toLowerCase() ? "" : shortcut;
   option.append(badgeFor(language.id), name, detail);
   if (current) {
     option.dataset.current = "true";
@@ -58,10 +60,11 @@ export function createCodeLanguagePicker(
   onPreview: (language: string) => void,
   onFinish: (language: string | null, destination: "code" | "below" | "toolbar" | null) => void,
   topInset: () => number,
+  t: MarkdownTranslator,
 ) {
   const initial = matchCodeLanguage(value);
   const current = initial?.id ?? (value || "plaintext");
-  const initialText = initial?.label ?? value;
+  const initialText = initial ? codeLanguageLabel(initial, t) : value;
   const footer = document.createElement("div");
   footer.className = "cm-md-code-settings";
   const control = document.createElement("label");
@@ -69,10 +72,10 @@ export function createCodeLanguagePicker(
   const badge = badgeFor(current);
   const input = document.createElement("input");
   input.value = initialText;
-  input.placeholder = "选择语言";
+  input.placeholder = t("选择语言");
   input.spellcheck = false;
   input.setAttribute("role", "combobox");
-  input.setAttribute("aria-label", "代码块语言");
+  input.setAttribute("aria-label", t("代码块语言"));
   input.setAttribute("aria-autocomplete", "list");
   input.setAttribute("aria-expanded", "false");
   const chevron = document.createElement("span");
@@ -85,7 +88,7 @@ export function createCodeLanguagePicker(
   menu.className = "notes-code-language-menu";
   menu.setAttribute("popover", "manual");
   menu.setAttribute("role", "listbox");
-  menu.setAttribute("aria-label", "可选代码语言");
+  menu.setAttribute("aria-label", t("可选代码语言"));
   input.setAttribute("aria-controls", menu.id);
   footer.append(control, menu);
 
@@ -127,7 +130,8 @@ export function createCodeLanguagePicker(
     if (finished || !footer.isConnected) return;
     finished = true;
     close();
-    input.value = next === null ? initialText : matchCodeLanguage(next)?.label ?? next;
+    const language = next === null ? initial : matchCodeLanguage(next);
+    input.value = language ? codeLanguageLabel(language, t) : next ?? initialText;
     languageMark(badge, matchCodeLanguage(input.value)?.id ?? (input.value || "plaintext"));
     onFinish(next, destination);
   };
@@ -144,7 +148,7 @@ export function createCodeLanguagePicker(
   const render = (query: string) => {
     options = suggestCodeLanguages(query, codeLanguages.length);
     menu.replaceChildren(...options.map(language => {
-      const option = codeLanguageOption(language, current === language.id);
+      const option = codeLanguageOption(language, t, current === language.id);
       option.id = `${menu.id}-${language.id}`;
       option.setAttribute("aria-selected", "false");
       option.addEventListener("click", () => finish(language.id, "code"));
@@ -154,7 +158,7 @@ export function createCodeLanguagePicker(
       const empty = document.createElement("div");
       empty.className = "notes-code-language-empty";
       empty.setAttribute("role", "status");
-      empty.textContent = "没有匹配的语言";
+      empty.textContent = t("没有匹配的语言");
       menu.append(empty);
     }
     active = -1;

@@ -1,4 +1,5 @@
 import type { Root, RootContent } from "mdast";
+import { markdownTranslator, type MarkdownLocale } from "./locale";
 import { normalizeMarkdown } from "./markdown";
 import { markdownParser } from "./markdownAst";
 
@@ -34,8 +35,9 @@ function countWords(value: string) {
   return words;
 }
 
-export function inspectMarkdown(value: string) {
+export function inspectMarkdown(value: string, locale?: MarkdownLocale) {
   const source = normalizeMarkdown(value);
+  const t = markdownTranslator(locale);
   const headings: MarkdownOutlineItem[] = [];
   let words = 0;
   let lines = 1;
@@ -48,7 +50,7 @@ export function inspectMarkdown(value: string) {
       if (node.type === "heading" && node.position?.start.offset !== undefined) {
         headings.push({
           depth: node.depth,
-          title: text.replace(/\s+/g, " ").trim() || "未命名标题",
+          title: text.replace(/\s+/g, " ").trim() || t("未命名标题"),
           offset: node.position.start.offset,
         });
       }

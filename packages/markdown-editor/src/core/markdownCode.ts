@@ -1,6 +1,7 @@
 import hljs from "highlight.js/lib/core";
 import { common, createLowlight } from "lowlight";
 import type { RootContent } from "hast";
+import type { MarkdownTranslator } from "./locale";
 import { replaceSelection, type MarkdownEdit } from "./markdown";
 import type { CodeFence } from "./markdownFence";
 export { readCodeFence, type CodeFence } from "./markdownFence";
@@ -14,7 +15,11 @@ export const codeLanguages = [
 ].sort((a, b) => a.label.localeCompare(b.label, "en"));
 
 export type CodeLanguage = typeof codeLanguages[number];
-const languageNames = (language: CodeLanguage) => [language.id, language.label, ...language.aliases];
+const languageNames = (language: CodeLanguage) => [language.id, language.label, ...language.aliases,
+  ...(language.id === "plaintext" ? ["Plain text"] : [])];
+
+export const codeLanguageLabel = (language: CodeLanguage, t: MarkdownTranslator) =>
+  language.id === "plaintext" ? t("纯文本") : language.label;
 
 export function matchCodeLanguage(input: string) {
   const query = input.trim().toLowerCase();

@@ -1,3 +1,4 @@
+import { MarkdownMessageError } from "../core/locale";
 type ErAttribute = { type: string; name: string; comment?: string; keys?: string[] };
 type ErNode = { id: string; label?: string; alias?: string; attributes?: ErAttribute[]; isGroup?: boolean; parentId?: string; cssClasses?: string; cssStyles?: string[]; cssCompiledStyles?: string[] };
 type ErEdge = { id: string; start: string; end: string };
@@ -66,7 +67,7 @@ export function prepareErLayout<T extends ErData>(data: T, database: ErDatabase,
   const sourceNames = new Map([...database.getEntities()].map(([name, entity]) => [entity.id, name]));
   const nodes = records.map((node) => {
     const catalog = node.isGroup ? groups : entities;
-    if (catalog.has(node.id)) throw new Error("实体或分组标识重复，请使用不同的名称。");
+    if (catalog.has(node.id)) throw new MarkdownMessageError("实体或分组标识重复，请使用不同的名称。");
     const id = prefix + (node.isGroup ? "g" : "n") + catalog.size; catalog.set(node.id, id);
     return { ...node, id };
   }).map((node, index) => {
@@ -86,7 +87,7 @@ export function prepareErLayout<T extends ErData>(data: T, database: ErDatabase,
 // render, with restoration on failure; the app serializes all diagram renders.
 export async function withErLayout<T>(database: ErDatabase, scope: string, render: () => T | Promise<T>, fieldText?: (value: string) => string) {
   const prototype = Object.getPrototypeOf(database) as ErDatabase, getData = prototype.getData, addRelationship = prototype.addRelationship, addEntity = prototype.addEntity, addSubGraph = prototype.addSubGraph;
-  if ([getData, addRelationship, addEntity, addSubGraph].some((method) => typeof method !== "function")) throw new Error("实体关系图数据接口不可用。");
+  if ([getData, addRelationship, addEntity, addSubGraph].some((method) => typeof method !== "function")) throw new MarkdownMessageError("实体关系图数据接口不可用。");
   prototype.addSubGraph = recordErSubgraph(addSubGraph);
   prototype.addEntity = recordErEntity(addEntity);
   prototype.addRelationship = recordErRelationship(addRelationship);

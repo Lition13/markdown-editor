@@ -1,5 +1,6 @@
 import { diagramTextWidth } from "./diagramText";
 import type { DiagramNote } from "./mermaidDiagramNotes";
+import { markdownTranslator } from "../core/locale";
 
 export interface WardleyNode {
   id: string; label: string; x: number; y: number; className?: string; labelOffsetX?: number; labelOffsetY?: number;
@@ -20,16 +21,19 @@ export interface WardleyData {
 }
 export interface WardleyDatabase { getWardleyData: () => WardleyData; getDiagramTitle: () => string; getAccDescription: () => string }
 
-export function wardleyNotes(data: WardleyData, title: string, description = ""): DiagramNote[] {
+export function wardleyNotes(data: WardleyData, title: string, description = "", t = markdownTranslator()): DiagramNote[] {
   const notes: DiagramNote[] = [], nodes = new Map(data.nodes.map((node) => [node.id, node]));
   const number = (value: number) => String(Number(value.toPrecision(12)));
-  if (title) notes.push({ context: "地图标题", label: title });
-  if (description) notes.push({ context: "说明", label: description });
+  if (title) notes.push({ context: t("地图标题"), label: title });
+  if (description) notes.push({ context: t("说明"), label: description });
   data.axes.stages?.forEach((label, index) => notes.push({ context: `S${index + 1} · Evolution${data.axes.stageBoundaries?.[index] !== undefined ? " · boundary " + number(data.axes.stageBoundaries[index]) : ""}`, label }));
   data.nodes.forEach((node, index) => notes.push({ context: `N${index + 1} · ${node.className ?? "component"} · Visibility ${number(node.y)}% · Evolution ${number(node.x)}%${node.sourceStrategy ? " · " + node.sourceStrategy : ""}${node.inertia ? " · inertia" : ""}`,
     label: node.label + (node.labelOffsetX !== undefined || node.labelOffsetY !== undefined ? `\nlabel [${node.labelOffsetX ?? 8}, ${node.labelOffsetY ?? -8}]` : "") }));
   data.links.forEach((link, index) => notes.push({ context: `R${index + 1} · ${nodes.get(link.source)?.label ?? link.source} ${link.flow === "backward" ? "←" : link.flow === "bidirectional" ? "↔" : link.flow === "forward" ? "→" : "—"} ${nodes.get(link.target)?.label ?? link.target}${link.dashed ? " · dashed" : ""}`, label: link.label ?? "" }));
-  data.trends.forEach((trend, index) => notes.push({ context: `E${index + 1} · ${nodes.get(trend.nodeId)?.label ?? trend.nodeId}`, label: `演进至 Evolution ${number(trend.targetX)}% · Visibility ${number(trend.targetY)}%` }));
+  data.trends.forEach((trend, index) => notes.push({
+    context: `E${index + 1} · ${nodes.get(trend.nodeId)?.label ?? trend.nodeId}`,
+    label: t("演进至 Evolution {x}% · Visibility {y}%", { x: number(trend.targetX), y: number(trend.targetY) }),
+  }));
   data.pipelines.forEach((pipeline, index) => notes.push({ context: `P${index + 1} · Pipeline · ${nodes.get(pipeline.nodeId)?.label ?? pipeline.nodeId}`,
     label: pipeline.componentIds.map((id) => nodes.get(id)).filter((node) => !!node).sort((a, b) => a.x - b.x).map((node) => `${node.label} (${number(node.x)}%)`).join(" → ") }));
   data.notes.forEach((note, index) => notes.push({ context: `T${index + 1} · Note · Visibility ${number(note.y)}% · Evolution ${number(note.x)}%`, label: note.text }));
@@ -41,7 +45,7 @@ export function wardleyNotes(data: WardleyData, title: string, description = "")
 
 // The complete renderer places one-line text at fixed map coordinates. Keep
 // those coordinates and provide full text in the appendix when it cannot fit.
-export function fitWardleyLabels(svg: Element, dark: boolean, data: WardleyData) {
+export function fitWardleyLabels(svg: Element, dark: boolean, data: WardleyData, t = markdownTranslator()) {
   const [, , width, height] = (svg.getAttribute("viewBox") ?? "").split(/[\s,]+/).map(Number);
   if (!Number.isFinite(width) || !Number.isFinite(height)) return;
   const fit = (selector: string, reference: (index: number, node: Element) => string, limit: number | ((index: number) => number) = 250) => {
@@ -57,7 +61,7 @@ export function fitWardleyLabels(svg: Element, dark: boolean, data: WardleyData)
       node.setAttribute("y", String(Math.max(18, Math.min(y, height - 18))));
     });
   };
-  fit(".wardley-title", () => "Wardley · 标题见下方", width - 48);
+  fit(".wardley-title", () => t("Wardley · 标题见下方"), width - 48);
   fit(".wardley-node-label", (index) => "N" + (index + 1));
   const labeledLinks = data.links.map((link, index) => ({ link, index })).filter(({ link }) => !!link.label);
   fit(".wardley-link-label", (index) => "R" + (labeledLinks[index].index + 1));

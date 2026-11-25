@@ -1,3 +1,5 @@
+import { MarkdownMessageError, markdownTranslator } from "../core/locale";
+
 export interface BlockPoint { x: number; y: number }
 export interface BlockBounds extends BlockPoint { width: number; height: number }
 export interface BlockPort { point: BlockPoint; outside: BlockPoint; direction: 0 | 1 }
@@ -60,7 +62,7 @@ class RouteQueue {
   }
 }
 
-export function blockRouter(nodes: BlockObstacle[], width: number, height: number, label = "块图") {
+export function blockRouter(nodes: BlockObstacle[], width: number, height: number, label = markdownTranslator()("块图")) {
   const xs = new Set([16, width - 16]), ys = new Set([16, height - 16]);
   for (const node of nodes) {
     for (const value of [node.x - 20, node.x - 10, node.x + node.width / 2, node.x + node.width + 10, node.x + node.width + 20]) xs.add(coordinate(value));
@@ -69,7 +71,7 @@ export function blockRouter(nodes: BlockObstacle[], width: number, height: numbe
   }
   const x = [...xs].sort((a, b) => a - b), y = [...ys].sort((a, b) => a - b);
   const columns = x.length, rows = y.length, area = columns * rows, stride = columns + 1;
-  if (area > 1_500_000) throw new Error(label + "连线过于复杂，请拆分后预览。");
+  if (area > 1_500_000) throw new MarkdownMessageError("{diagram}连线过于复杂，请拆分后预览。", { diagram: label });
   const changes = new Int16Array((columns + 1) * (rows + 1));
   // A difference grid keeps obstacle construction bounded by the mesh size,
   // without testing every grid point against every block.
@@ -149,6 +151,6 @@ export function blockRouter(nodes: BlockObstacle[], width: number, height: numbe
         queue.push({ key, cost, score: cost + heuristic(next) });
       }
     }
-    throw new Error(label + "未能找到清晰的连线路径，请增加留白或拆分后预览。");
+    throw new MarkdownMessageError("{diagram}未能找到清晰的连线路径，请增加留白或拆分后预览。", { diagram: label });
   };
 }

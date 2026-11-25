@@ -29,7 +29,7 @@ import {
   toggleMarkdownTask,
 } from "../core/markdown";
 import { copyMarkdownText, openMarkdownLink, useMarkdownEnvironment } from "./editorContext";
-import { markdownFootnotes, markdownMath, markdownSchema, rehypeNormalizeLinks } from "../core/markdownPolicy";
+import { markdownMath, markdownSchema, rehypeNormalizeLinks } from "../core/markdownPolicy";
 import MermaidDiagram from "./MermaidDiagram";
 function documentIds(options: { prefix: string }) {
   return (tree: Root) => {
@@ -90,12 +90,13 @@ function TableCell({ tag: Tag, children, ...props }: ComponentProps<"td"> & { ta
   return <Tag {...props}>{renderTableCell && position ? renderTableCell(position, children) : children}</Tag>;
 }
 function TaskCheckbox({ checked }: { checked: boolean }) {
+  const { t } = useMarkdownEnvironment();
   const marker = useContext(TaskContext);
   const { source, onChange } = useContext(SourceContext);
   return (
     <input
       type="checkbox"
-      aria-label={`Markdown 待办：${marker?.label || "待办事项"}`}
+      aria-label={t("Markdown 待办：{label}", { label: marker?.label || t("待办事项") })}
       checked={checked}
       disabled={!marker || !onChange}
       onChange={(e) =>
@@ -107,6 +108,7 @@ function TaskCheckbox({ checked }: { checked: boolean }) {
 }
 function CodeBlock({ children }: { children: ReactNode }) {
   const environment = useMarkdownEnvironment();
+  const { t } = environment;
   const [copied, setCopied] = useState(false);
   const child = Children.toArray(children).find((c) => isValidElement(c));
   const language = isValidElement<{ className?: string }>(child)
@@ -128,12 +130,12 @@ function CodeBlock({ children }: { children: ReactNode }) {
         <span>{language}</span>
         <button
           type="button"
-          aria-label="复制代码"
-          title={copied ? "已复制" : "复制代码"}
+          aria-label={t("复制代码")}
+          title={copied ? t("已复制") : t("复制代码")}
           onClick={() => void copy()}
         >
           {copied ? <Check size={12} /> : <Copy size={12} />}
-          <span>{copied ? "已复制" : "复制"}</span>
+          <span>{copied ? t("已复制") : t("复制")}</span>
         </button>
       </div>
       {language.toLowerCase() === "mermaid" ? (
@@ -153,6 +155,7 @@ function Image({
   alt?: string;
   title?: string;
 }) {
+  const { t } = useMarkdownEnvironment();
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [src]);
   const safe = src ? safeMarkdownUrl(src, "image") : "";
@@ -160,7 +163,7 @@ function Image({
     return (
       <span className="markdown-image-error">
         <ImageOff size={15} />
-        {alt || "图片"} · {failed ? "加载失败" : "地址不可用"}
+        {alt || t("图片")} · {failed ? t("加载失败") : t("地址不可用")}
       </span>
     );
   return (
@@ -196,8 +199,9 @@ const components: Components = {
   th: ({ node: _node, ...props }) => <TableCell tag="th" {...props} />,
   td: ({ node: _node, ...props }) => <TableCell tag="td" {...props} />,
   li: ({ node, children, className }) => {
+    const { t } = useMarkdownEnvironment();
     const { source } = useContext(SourceContext);
-    const marker = taskMarker(source, node?.position?.start.offset);
+    const marker = taskMarker(source, node?.position?.start.offset, t("待办事项"));
     return (
       <TaskContext.Provider value={marker}>
         <li className={className}>{children}</li>
@@ -244,14 +248,14 @@ export default function MarkdownRenderer({
   renderTableCell,
 }: MarkdownContentProps) {
   const prefix = "md-" + useId().replace(/[^a-zA-Z0-9_-]/g, "") + "-";
-  const { normalizeLink } = useMarkdownEnvironment();
+  const { normalizeLink, t } = useMarkdownEnvironment();
   const source = normalizeMarkdown(value);
   return (
     <SourceContext.Provider value={{ source, onChange, renderTableCell }}>
       <div className={`markdown-body ${className}`}>
         <Markdown
           remarkPlugins={[remarkFrontmatter, remarkGfm, remarkBreaks, remarkMath]}
-          remarkRehypeOptions={markdownFootnotes}
+          remarkRehypeOptions={{ footnoteLabel: t("注释"), footnoteBackLabel: t("返回正文") }}
           rehypePlugins={[
             rehypeRaw,
             [rehypeNormalizeLinks, normalizeLink],

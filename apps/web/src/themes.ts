@@ -1,4 +1,5 @@
 import type { MarkdownTheme } from "@lition13/markdown-editor";
+import type { WebTranslator } from "./locale";
 
 export const themeFields = [
   { id: "background", label: "工作区背景" },
@@ -69,41 +70,42 @@ export function themeColors(theme: Pick<CustomTheme, "base" | "colors">): Record
   return { ...builtInColors[theme.base], ...theme.colors };
 }
 
-export function newCustomTheme(base: MarkdownTheme, themes: SavedTheme[]): CustomTheme {
-  let name = "我的主题";
-  for (let suffix = 2; themes.some(theme => theme.name === name); suffix++) name = `我的主题 ${suffix}`;
+export function newCustomTheme(base: MarkdownTheme, themes: SavedTheme[], t: WebTranslator): CustomTheme {
+  const baseName = t("我的主题");
+  let name = baseName;
+  for (let suffix = 2; themes.some(theme => theme.name === name); suffix++) name = `${baseName} ${suffix}`;
   return { name, base, colors: {} };
 }
 
-export function validateThemeName(name: string, id: string, themes: SavedTheme[]) {
+export function validateThemeName(name: string, id: string, themes: SavedTheme[], t: WebTranslator) {
   const label = name.trim();
-  if (!label) return "请输入主题名称。";
-  if (themes.some(theme => theme.id !== id && theme.name === label)) return "已有同名主题，请换个名字。";
+  if (!label) return t("请输入主题名称。");
+  if (themes.some(theme => theme.id !== id && theme.name === label)) return t("已有同名主题，请换个名字。");
 }
 
 export function formatThemeSource(theme: CustomTheme) {
   return JSON.stringify({ name: theme.name, base: theme.base, colors: themeColors(theme) }, null, 2);
 }
 
-export function parseThemeSource(source: string): { theme: CustomTheme; error?: never } | { error: string; theme?: never } {
+export function parseThemeSource(source: string, t: WebTranslator): { theme: CustomTheme; error?: never } | { error: string; theme?: never } {
   let value: unknown;
   try {
     value = JSON.parse(source);
   } catch {
-    return { error: "请输入有效的 JSON。" };
+    return { error: t("请输入有效的 JSON。") };
   }
-  if (!isRecord(value)) return { error: "主题源码必须是一个 JSON 对象。" };
+  if (!isRecord(value)) return { error: t("主题源码必须是一个 JSON 对象。") };
   const { name, base, colors } = value;
-  if (typeof name !== "string" || !name.trim()) return { error: "请在 name 中填写主题名称。" };
-  if (!builtInTheme(base)) return { error: 'base 请选择 "light" 或 "dark"。' };
-  if (colors !== undefined && !isRecord(colors)) return { error: "colors 必须是一个颜色对象。" };
+  if (typeof name !== "string" || !name.trim()) return { error: t("请在 name 中填写主题名称。") };
+  if (!builtInTheme(base)) return { error: t('base 请选择 "light" 或 "dark"。') };
+  if (colors !== undefined && !isRecord(colors)) return { error: t("colors 必须是一个颜色对象。") };
 
   const palette: CustomTheme["colors"] = {};
   for (const [id, raw] of Object.entries(colors ?? {})) {
     const field = themeFields.find(field => field.id === id);
-    if (!field) return { error: `colors 中没有 ${id} 这个颜色项。` };
+    if (!field) return { error: t("colors 中没有 {key} 这个颜色项。", { key: id }) };
     const color = typeof raw === "string" && normalizeThemeColor(raw);
-    if (!color) return { error: `${field.id} 需要有效的十六进制颜色，例如 #3458c7。` };
+    if (!color) return { error: t("{key} 需要有效的十六进制颜色，例如 #3458c7。", { key: field.id }) };
     if (color !== builtInColors[base][field.id]) palette[field.id] = color;
   }
   return { theme: { name: name.trim(), base, colors: palette } };

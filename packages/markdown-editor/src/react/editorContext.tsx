@@ -1,5 +1,6 @@
 import { createContext, useContext, type Ref } from "react";
 import { safeMarkdownUrl } from "../core/markdown";
+import { markdownTranslator, type MarkdownLocale, type MarkdownTranslator } from "../core/locale";
 import { resolveMarkdownShortcuts, type MarkdownShortcutOverrides } from "../core/markdownShortcuts";
 
 export type MarkdownTheme = "light" | "dark";
@@ -12,6 +13,7 @@ export interface MarkdownEditorHandle {
 
 export interface MarkdownOptions {
   theme?: MarkdownTheme;
+  locale?: MarkdownLocale;
   className?: string;
   normalizeLink?: (href: string) => string | undefined;
   onOpenLink?: (href: string) => boolean | void | Promise<boolean | void>;
@@ -38,6 +40,8 @@ export interface MarkdownPreviewProps extends MarkdownOptions {
 
 export interface EditorEnvironment {
   theme: MarkdownTheme;
+  locale: MarkdownLocale;
+  t: MarkdownTranslator;
   normalizeLink?: MarkdownOptions["normalizeLink"];
   onOpenLink?: MarkdownOptions["onOpenLink"];
   copyText?: MarkdownOptions["copyText"];
@@ -52,6 +56,8 @@ export interface EditorEnvironment {
 
 export const defaultEnvironment: EditorEnvironment = {
   theme: "light",
+  locale: "zh-CN",
+  t: markdownTranslator(),
   ariaLabel: "Markdown 正文",
   placeholder: "开始输入。输入 / 打开编辑工具",
   surface: null,

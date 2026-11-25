@@ -60,7 +60,7 @@ function MenuLevel({
   initialFocus,
   className,
   search,
-  closeLabel = "关闭编辑工具",
+  closeLabel,
   resolvePoint,
 }: {
   items: ActionItem[];
@@ -78,7 +78,7 @@ function MenuLevel({
   closeLabel?: string;
   resolvePoint?: () => MenuPoint | undefined;
 }) {
-  const { surface, overlay, topInset } = useMarkdownEnvironment();
+  const { surface, overlay, topInset, t } = useMarkdownEnvironment();
   const ref = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState(point);
   const [query, setQuery] = useState("");
@@ -97,10 +97,11 @@ function MenuLevel({
     });
   const visibleItems = filterItems(items);
   const [child, setChild] = useState<{
-    item: ActionItem;
+    id: string;
     point: MenuPoint;
     focus: boolean;
   } | null>(null);
+  const childItem = child && visibleItems.find(item => item.id === child.id);
   useLayoutEffect(() => {
     const menu = ref.current;
     if (!menu) return;
@@ -140,7 +141,7 @@ function MenuLevel({
   const openChild = (item: ActionItem, button: HTMLElement, focus = false) => {
     const rect = button.getBoundingClientRect();
     setChild({
-      item,
+      id: item.id,
       point: {
         x:
           rect.right + 240 > window.innerWidth
@@ -242,12 +243,12 @@ function MenuLevel({
         {dialog && (
           <div className="markdown-menu-panel-heading">
             <strong>{label}</strong>
-            <button type="button" aria-label={closeLabel} onClick={() => onClose()}><X size={15} /></button>
+            <button type="button" aria-label={closeLabel ?? t("关闭编辑工具")} onClick={() => onClose()}><X size={15} /></button>
           </div>
         )}
         {query.trim() &&
           !visibleItems.some((i) => !i.search && !i.separator) && (
-            <p className="menu-no-results">{search?.emptyText ?? "没有匹配的命令"}</p>
+            <p className="menu-no-results">{search?.emptyText ?? t("没有匹配的命令")}</p>
           )}
         {visibleItems.map((item) =>
           item.search ? (
@@ -309,7 +310,7 @@ function MenuLevel({
               aria-checked={item.checked}
               aria-haspopup={item.children ? "menu" : undefined}
               disabled={item.disabled}
-              className={`action-menu-item ${item.danger ? "danger" : ""} ${child?.item.id === item.id ? "submenu-open" : ""}`}
+              className={`action-menu-item ${item.danger ? "danger" : ""} ${child?.id === item.id ? "submenu-open" : ""}`}
               onMouseEnter={(e) => {
                 if (item.children) openChild(item, e.currentTarget);
                 else setChild(null);
@@ -333,24 +334,22 @@ function MenuLevel({
           ),
         )}
       </div>
-      {child && (
+      {child && childItem?.children && (
         <MenuLevel
-          items={
-            visibleItems.find((i) => i.id === child.item.id)?.children || []
-          }
-          key={child.item.id}
+          items={childItem.children}
+          key={child.id}
           point={child.point}
           owner={owner}
           onClose={onClose}
           onBack={() => {
             ref.current
               ?.querySelector<HTMLButtonElement>(
-                `[data-menu-item="${child.item.id}"]`,
+                `[data-menu-item="${child.id}"]`,
               )
               ?.focus();
             setChild(null);
           }}
-          label={`${child.item.label}子菜单`}
+          label={t("{label}子菜单", { label: childItem.label ?? "" })}
           autoFocus={child.focus}
         />
       )}
@@ -362,7 +361,7 @@ export default function ActionMenu({
   items,
   point,
   onClose,
-  label = "右键菜单",
+  label,
   anchor,
   dialog = false,
   initialFocus,
@@ -383,6 +382,7 @@ export default function ActionMenu({
   closeLabel?: string;
   resolvePoint?: () => MenuPoint | undefined;
 }) {
+  const { t } = useMarkdownEnvironment();
   const owner = useId();
   const close = useRef(onClose);
   close.current = onClose;
@@ -420,7 +420,7 @@ export default function ActionMenu({
       point={point}
       owner={owner}
       onClose={onClose}
-      label={label}
+      label={label ?? t("右键菜单")}
       anchor={anchor}
       dialog={dialog}
       initialFocus={initialFocus}

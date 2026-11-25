@@ -10,7 +10,7 @@ export default function EditorDialog({ mode, onMode, onClose, children }: {
   children: ReactNode;
 }) {
   const environment = useMarkdownEnvironment();
-  const { overlay, topInset } = environment;
+  const { overlay, topInset, t } = environment;
   const dialog = useRef<HTMLDialogElement>(null);
   const header = useRef<HTMLElement>(null);
   const [menuLayer, setMenuLayer] = useState<HTMLDivElement | null>(null);
@@ -36,24 +36,24 @@ export default function EditorDialog({ mode, onMode, onClose, children }: {
 
   if (!overlay) return null;
   return createPortal(
-    <dialog ref={dialog} className="markdown-editor-modal" aria-label="编辑 Markdown"
+    <dialog ref={dialog} className="markdown-editor-modal" aria-label={t("编辑 Markdown")}
       style={{ "--markdown-fullscreen-inset": Math.max(0, topInset) + "px" } as CSSProperties}
       onKeyDown={event => {
         if (event.key === "Escape" && (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)) event.preventDefault();
       }}
       onCancel={event => { event.preventDefault(); onClose(); }}>
       <header ref={header} className="markdown-fullscreen-header">
-        <h2>编辑 Markdown</h2>
-        <div className="markdown-fullscreen-modes" role="group" aria-label="全屏编辑视图">
+        <h2>{t("编辑 Markdown")}</h2>
+        <div className="markdown-fullscreen-modes" role="group" aria-label={t("全屏编辑视图")}>
           <button type="button" aria-pressed={mode === "live"} onClick={() => onMode("live")}>
-            <PencilLine size={15} aria-hidden="true" />编辑
+            <PencilLine size={15} aria-hidden="true" />{t("编辑")}
           </button>
           <button type="button" aria-pressed={mode === "source"} onClick={() => onMode("source")}>
-            <CodeXml size={16} aria-hidden="true" />源码
+            <CodeXml size={16} aria-hidden="true" />{t("源码")}
           </button>
         </div>
         <button type="button" className="markdown-fullscreen-done" onClick={onClose}>
-          <Minimize2 size={16} aria-hidden="true" />完成编辑
+          <Minimize2 size={16} aria-hidden="true" />{t("完成编辑")}
         </button>
       </header>
       {menuLayer && (

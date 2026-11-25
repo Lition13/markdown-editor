@@ -168,6 +168,16 @@ button, input, select { font: inherit; }
 .button.primary:hover { background: var(--accent-hover); }
 .button:disabled { opacity: .5; cursor: not-allowed; }
 .icon-control { width: 36px; padding: 0; color: var(--muted); }
+.language-control { position: relative; flex: none; }
+.language-control select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.language-control:has(select:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
 .panel-toggle[aria-expanded="true"], .panel-toggle[aria-pressed="true"], .theme-control[data-active="true"] {
   background: var(--soft-accent);
   color: var(--accent-text, var(--accent));
@@ -580,7 +590,12 @@ dialog.side-panel::backdrop { background: #101a3278; }
   .workbench-toolbar { gap: 3px; padding-inline: 5px; }
   .workbench-toolbar .panel-toggle { min-width: 30px; padding-inline: 4px; }
   .workbench-toolbar .icon-control { width: 28px; }
-  .view-options button { padding-inline: 5px; }
+  .workbench-toolbar .document-name { display: none; }
+}
+@media (max-width: 420px) {
+  .workbench-toolbar .view-options button { width: 28px; padding-inline: 0; }
+  .workbench-toolbar .view-options button svg { display: block; }
+  .workbench-toolbar .view-label { display: none; }
 }
 @media (hover: none) and (pointer: coarse) {
   :root { --toolbar-edge: 34px; --toolbar-row: 50px; }

@@ -1,3 +1,4 @@
+import { MarkdownMessageError } from "../core/locale";
 type ClassNode = { id: string; isGroup?: boolean; shape?: string; parentId?: string; cssClasses?: string; styles?: string[]; cssStyles?: string[]; [key: string]: unknown };
 type ClassEdge = { id: string; start: string; end: string; arrowTypeStart?: string; arrowTypeEnd?: string; [key: string]: unknown };
 type ClassData = { nodes: ClassNode[]; edges: ClassEdge[]; [key: string]: unknown };
@@ -44,7 +45,7 @@ export function prepareClassLayout<T extends ClassData>(data: T, definitions?: C
 // that render so the real factory uses it, then restore it even on failure.
 export async function withClassLayout<T>(database: ClassDatabase, render: () => T | Promise<T>) {
   const prototype = Object.getPrototypeOf(database) as ClassDatabase, original = prototype.getData;
-  if (typeof original !== "function") throw new Error("类图数据接口不可用");
+  if (typeof original !== "function") throw new MarkdownMessageError("类图数据接口不可用");
   prototype.getData = function () { return prepareClassLayout(original.call(this), this.styleClasses, this.diagramId); };
   try { return await render(); }
   finally { prototype.getData = original; }

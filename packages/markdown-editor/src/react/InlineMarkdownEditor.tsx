@@ -195,7 +195,7 @@ function removeEmptyMarkdownMarker(view: EditorView, repeat = false) {
 function editorPresentation(environment: EditorEnvironment, host: HTMLElement) {
   return [
     markdownCodeCompletion(environment.overlay ?? host),
-    EditorView.contentAttributes.of({ "aria-label": environment.ariaLabel, "aria-description": "输入 / 打开描述工具", spellcheck: "false" }),
+    EditorView.contentAttributes.of({ "aria-label": environment.ariaLabel, "aria-description": environment.t("输入 / 打开描述工具"), spellcheck: "false" }),
     placeholder(environment.placeholder),
   ];
 }
@@ -404,12 +404,14 @@ export default function InlineMarkdownEditor(props: Props) {
     const view = editor.current;
     const element = host.current;
     if (!view || !element) return;
-    const updatePresentation = previous.overlay !== environment.overlay || previous.ariaLabel !== environment.ariaLabel || previous.placeholder !== environment.placeholder;
-    const updateLinks = previous.normalizeLink !== environment.normalizeLink;
-    if (updatePresentation || updateLinks) view.dispatch({
+    const updateLocale = previous.locale !== environment.locale;
+    const updatePresentation = updateLocale || previous.overlay !== environment.overlay
+      || previous.ariaLabel !== environment.ariaLabel || previous.placeholder !== environment.placeholder;
+    const refreshWidgets = updateLocale || previous.normalizeLink !== environment.normalizeLink;
+    if (updatePresentation || refreshWidgets) view.dispatch({
       effects: [
         ...(updatePresentation ? [presentation.reconfigure(editorPresentation(environment, element))] : []),
-        ...(updateLinks ? [refreshProjection.of(null)] : []),
+        ...(refreshWidgets ? [refreshProjection.of(null)] : []),
       ],
     });
   }, [environment, onTableHistory, presentation, store]);
