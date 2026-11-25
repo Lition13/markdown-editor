@@ -72,7 +72,7 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
 }) {
   const environment = useMarkdownEnvironment();
   const shortcuts = environment.shortcuts;
-  const keySequence = useMarkdownKeySequence();
+  const keySequence = useMarkdownKeySequence(shortcuts.hasSequence("table"));
   const [editing, setEditing] = useState<CellEdit | null>(null);
   const [panel, setPanel] = useState<TablePanel | null>(null);
   const [copyFeedback, setCopyFeedback] = useState("");

@@ -35,7 +35,8 @@ const nameOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: "ba
 let connection: Promise<IDBDatabase> | undefined;
 
 export const exampleFile: MarkdownFile = { id: "example", revision: 0, ...example };
-const previousExample = example.value.replace("| 插入表格 | Ctrl+Shift+Enter |", "| 插入表格 | Ctrl+T |");
+const previousExamples = new Set(["Ctrl+T", "Ctrl+Shift+Enter"].map(key =>
+  example.value.replace("| 插入表格 | Ctrl+Alt+T |", `| 插入表格 | ${key} |`)));
 const nameKey = (name: string) => name.normalize("NFC").toLowerCase();
 
 export function fileEntry({ id, name, revision, folderId }: FileEntry): FileEntry {
@@ -242,7 +243,7 @@ async function withText(tx: IDBTransaction, entry: FileEntry): Promise<MarkdownF
   const value = await read<string | undefined>(tx.objectStore(textStore).get(entry.id));
   if (value === undefined) throw new Error("无法读取此文件的内容。");
   const unchangedExample = entry.id === exampleFile.id && entry.name === exampleFile.name
-    && entry.revision === 0 && value === previousExample;
+    && entry.revision === 0 && previousExamples.has(value);
   return { ...entry, value: unchangedExample ? example.value : value };
 }
 

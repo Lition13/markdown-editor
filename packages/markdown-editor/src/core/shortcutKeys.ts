@@ -124,6 +124,7 @@ export function keyIssue(binding: string): MarkdownShortcutIssue | undefined {
   const warning = browserWarnings.get(binding);
   if (warning) return { kind: "warning", message: `可能与浏览器的「${warning}」冲突，浏览器优先时编辑器收不到按键。` };
   if (binding === "Ctrl+Space") return { kind: "warning", message: "此组合可能被系统用于切换中文输入法。" };
+  if (binding === "Ctrl+Alt+T") return { kind: "warning", message: "部分系统会用它打开终端，部分键盘布局可能将它识别为 AltGr。" };
   if (binding.startsWith("Ctrl+Alt+")) {
     return { kind: "warning", message: "这个组合可能被识别为 AltGr，部分键盘布局下会用来输入字符。" };
   }

@@ -9,7 +9,6 @@ import "./shortcutSettings.css";
 const groups = [...new Set(markdownShortcutCommands.map(command => command.group))];
 const fixedShortcuts = [
   { label: "打开斜杠菜单", key: "/" },
-  { label: "双段快捷键起始键", key: editorShortcutPrefix },
   { label: "表格上一格 / 下一格", key: "Shift+Tab / Tab" },
   { label: "标题升一级 / 降一级", key: "Shift+Tab / Tab" },
   { label: "续写同级标题", key: "Alt+Shift+Enter" },
@@ -180,7 +179,7 @@ export default function ShortcutSettings({ value, onChange, onClose, storageFail
                       onClick={event => startEdit(command, event.currentTarget, binding)}>
                       <span className="shortcut-binding-keys">
                         {binding ? <kbd>{binding}</kbd> : <span className="shortcut-hint">已停用</span>}
-                        {aliases.map(alias => <kbd key={alias.key} title={alias.controlOnly ? "仅 Control 键" : undefined}>{alias.key}</kbd>)}
+                        {aliases.map(alias => <kbd key={alias.key}>{alias.key}</kbd>)}
                       </span>
                       <PencilLine size={14} aria-hidden="true" />
                     </button>

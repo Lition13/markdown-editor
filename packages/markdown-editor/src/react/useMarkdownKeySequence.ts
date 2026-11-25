@@ -3,7 +3,7 @@ import { editorShortcutPrefix, isModifierKey, markdownShortcutFromEvent, type Sh
 
 type KeyEvent = ShortcutEvent & Pick<KeyboardEvent, "repeat" | "preventDefault" | "stopPropagation">;
 
-export function useMarkdownKeySequence() {
+export function useMarkdownKeySequence(enabled: boolean) {
   const armed = useRef(false);
   const [waiting, setWaiting] = useState(false);
 
@@ -14,6 +14,10 @@ export function useMarkdownKeySequence() {
   }
 
   function read(event: KeyEvent) {
+    if (!enabled) {
+      reset();
+      return false;
+    }
     if (markdownShortcutFromEvent(event) === editorShortcutPrefix) {
       if (!event.repeat) {
         armed.current = true;
@@ -33,5 +37,5 @@ export function useMarkdownKeySequence() {
     return !event.ctrlKey && !event.metaKey && !event.altKey;
   }
 
-  return { read, reset, waiting, isWaiting: () => armed.current };
+  return { read, reset, waiting: enabled && waiting, isWaiting: () => enabled && armed.current };
 }

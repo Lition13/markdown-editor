@@ -6,18 +6,32 @@ function key(code: string, value: string, modifiers: Partial<KeyboardEvent> = {}
   return { code, key: value, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...modifiers };
 }
 
-test("default editor commands preserve their scopes, aliases and browser-safe replacements", () => {
+test("first-version defaults change only the insert-table chord", () => {
   const shortcuts = resolveMarkdownShortcuts();
+  expect(shortcuts.labels).toEqual({
+    source: "Ctrl+/", expand: "Alt+Enter", undo: "Ctrl+Z", redo: "Ctrl+Y", help: "Ctrl+Shift+/",
+    bold: "Ctrl+B", italic: "Ctrl+I", strike: "Alt+Shift+5", inline: "Ctrl+Shift+`", quote: "Ctrl+Shift+Q",
+    ordered: "Ctrl+Shift+[", bullet: "Ctrl+Shift+]", task: "Alt+T", indent: "Ctrl+[", outdent: "Ctrl+]",
+    table: "Ctrl+Alt+T", link: "Ctrl+K", image: "Ctrl+Shift+I", code: "Ctrl+Shift+K", math: "Ctrl+Shift+M",
+    heading1: "Ctrl+1", heading2: "Ctrl+2", heading3: "Ctrl+3", heading4: "Ctrl+4", heading5: "Ctrl+5", heading6: "Ctrl+6",
+    paragraph: "Ctrl+0", raiseHeading: "Ctrl+=", lowerHeading: "Ctrl+-", rowUp: "Alt+ArrowUp", rowDown: "Alt+ArrowDown",
+    columnLeft: "Alt+ArrowLeft", columnRight: "Alt+ArrowRight", insertRow: "Ctrl+Enter", deleteRow: "Ctrl+Shift+Backspace",
+  });
   expect(shortcuts.match("live", key("KeyT", "t", { ctrlKey: true }))).toBeUndefined();
-  expect(shortcuts.match("live", key("Enter", "Enter", { ctrlKey: true, shiftKey: true }))).toBe("table");
-  expect(shortcuts.match("table", key("Enter", "Enter", { ctrlKey: true, shiftKey: true }))).toBeUndefined();
+  expect(shortcuts.match("live", key("KeyT", "t", { ctrlKey: true, altKey: true }))).toBe("table");
+  expect(shortcuts.match("source", key("KeyT", "t", { ctrlKey: true, altKey: true }))).toBe("table");
+  expect(shortcuts.match("live", key("Enter", "Enter", { ctrlKey: true, shiftKey: true }))).toBeUndefined();
+  expect(shortcuts.match("table", key("Enter", "Enter", { ctrlKey: true, shiftKey: true }))).toBe("insertRow");
   expect(shortcuts.match("table", key("Enter", "Enter", { ctrlKey: true }))).toBe("insertRow");
-  expect(shortcuts.match("table", key("KeyL", "l"), true)).toBe("columnLeft");
-  expect(shortcuts.match("source", key("KeyP", "p"), true)).toBe("image");
-  expect(headingForShortcut(shortcuts.match("source", key("Digit4", "4"), true))).toBe(4);
-  expect(shortcuts.match("source", key("Digit0", "0"), true)).toBeUndefined();
-  expect(shortcuts.match("table", key("KeyY", "y", { ctrlKey: true }))).toBe("redo");
-  expect(shortcuts.match("table", key("KeyY", "y", { metaKey: true }))).toBeUndefined();
+  expect(shortcuts.match("table", key("ArrowLeft", "ArrowLeft", { altKey: true }))).toBe("columnLeft");
+  expect(shortcuts.match("source", key("KeyI", "I", { ctrlKey: true, shiftKey: true }))).toBe("image");
+  const heading = key("Digit4", "4", { ctrlKey: true });
+  expect(headingForShortcut(shortcuts.match("live", heading))).toBe(4);
+  expect(shortcuts.match("source", heading)).toBeUndefined();
+  expect(shortcuts.match("table", key("KeyY", "y", { metaKey: true }))).toBe("redo");
+  expect(shortcuts.match("table", key("KeyZ", "Z", { ctrlKey: true, shiftKey: true }))).toBe("redo");
+  expect(shortcuts.match("live", key("Backquote", "`", { ctrlKey: true }))).toBe("inline");
+  expect(shortcuts.hasSequence("live")).toBe(false);
 });
 
 test("recording and manual entry normalize the same key names without taking AltGr text", () => {
@@ -39,6 +53,9 @@ test("conflicts distinguish overlapping commands, protected keys and browser war
   expect(checkMarkdownShortcut("table", editorShortcutPrefix, {})).toMatchObject({ kind: "reserved" });
   expect(checkMarkdownShortcut("table", "T", {})).toMatchObject({ kind: "invalid" });
   expect(checkMarkdownShortcut("table", "Ctrl+S", {})).toMatchObject({ kind: "warning" });
+  expect(checkMarkdownShortcut("table", undefined, {})).toMatchObject({ kind: "warning" });
+  expect(checkMarkdownShortcut("heading4", undefined, { heading4: "F8" })).toMatchObject({ kind: "warning" });
+  expect(checkMarkdownShortcut("table", "Ctrl+4", {})).toMatchObject({ kind: "reserved" });
   expect(checkMarkdownShortcut("bold", undefined, { bold: null, table: "Ctrl+B" })).toMatchObject({ kind: "duplicate" });
 });
 
@@ -55,5 +72,6 @@ test("custom bindings replace their old keys and survive loading alongside other
   expect(keymap.labels.bold).toBeUndefined();
   expect(keymap.match("table", key("KeyZ", "z"), true)).toBe("undo");
   expect(keymap.match("table", key("KeyZ", "z", { ctrlKey: true }))).toBeUndefined();
-  expect(readMarkdownShortcutOverrides({ bold: "Ctrl+Z", undo: "Ctrl+Shift+Enter" })).toEqual({});
+  expect(keymap.hasSequence("table")).toBe(true);
+  expect(readMarkdownShortcutOverrides({ bold: "Ctrl+Z", undo: "Ctrl+Alt+T" })).toEqual({});
 });

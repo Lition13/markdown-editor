@@ -27,8 +27,8 @@ test("快捷键设置检查冲突，录制后应用到正文和源码，刷新�
   await page.goto("./");
   await expect(notes(page)).toBeVisible();
   let dialog = await openSettings(page);
-  await dialog.getByRole("searchbox", { name: "搜索快捷键" }).fill("Ctrl+Shift+Enter");
-  await expect(dialog.getByRole("button", { name: "修改 插入表格", exact: true })).toContainText("Ctrl+Shift+Enter");
+  await dialog.getByRole("searchbox", { name: "搜索快捷键" }).fill("Ctrl+Alt+T");
+  await expect(dialog.getByRole("button", { name: "修改 插入表格", exact: true })).toContainText("Ctrl+Alt+T");
   const form = await editShortcut(dialog, "插入表格");
   const input = form.getByRole("textbox", { name: "快捷键组合", exact: true });
   const save = form.getByRole("button", { name: "保存", exact: true });
@@ -54,7 +54,7 @@ test("快捷键设置检查冲突，录制后应用到正文和源码，刷新�
   await closeSettings(dialog);
 
   await notes(page).press("Control+Home");
-  await notes(page).press("Control+Shift+Enter");
+  await notes(page).press("Control+Alt+t");
   await expect(tableDialog(page)).toHaveCount(0);
   await notes(page).press("Control+Shift+F8");
   await expect(tableDialog(page)).toBeVisible();
@@ -75,9 +75,9 @@ test("快捷键设置检查冲突，录制后应用到正文和源码，刷新�
   dialog = await openSettings(page);
   const restored = await editShortcut(dialog, "插入表格");
   await restored.getByRole("button", { name: "恢复默认", exact: true }).click();
-  await expect(dialog.getByRole("button", { name: "修改 插入表格", exact: true })).toContainText("Ctrl+Shift+Enter");
+  await expect(dialog.getByRole("button", { name: "修改 插入表格", exact: true })).toContainText("Ctrl+Alt+T");
   await closeSettings(dialog);
-  await notes(page).press("Control+Shift+Enter");
+  await notes(page).press("Control+Alt+t");
   await expect(tableDialog(page)).toBeVisible();
 });
 
@@ -140,8 +140,7 @@ test("快捷键设置支持录制双段键，表格与正文可共用不同作�
   await notes(page).press("Control+Enter");
   await expect(tableDialog(page)).toBeVisible();
   await tableDialog(page).getByRole("button", { name: "关闭插入面板", exact: true }).click();
-  await notes(page).press("Control+Shift+Period");
-  await notes(page).press("Slash");
+  await notes(page).press("Control+Shift+Slash");
   await expect(page.getByRole("dialog", { name: "Markdown 语法帮助", exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
@@ -150,6 +149,6 @@ test("快捷键设置支持录制双段键，表格与正文可共用不同作�
   await reset.click();
   await expect(reset).toBeDisabled();
   await expect(dialog.getByRole("button", { name: "修改 撤销", exact: true })).toContainText("Ctrl+Z");
-  await expect(dialog.getByRole("button", { name: "修改 插入表格", exact: true })).toContainText("Ctrl+Shift+Enter");
-  await expect(dialog.getByRole("button", { name: "修改 Markdown 语法帮助", exact: true })).toContainText("Ctrl+Shift+. → /");
+  await expect(dialog.getByRole("button", { name: "修改 插入表格", exact: true })).toContainText("Ctrl+Alt+T");
+  await expect(dialog.getByRole("button", { name: "修改 Markdown 语法帮助", exact: true })).toContainText("Ctrl+Shift+/");
 });

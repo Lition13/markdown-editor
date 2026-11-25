@@ -276,7 +276,7 @@ function Editor({
     [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [focusOnLoad, setFocusOnLoad] = useState(false);
-  const keySequence = useMarkdownKeySequence();
+  const keySequence = useMarkdownKeySequence(environment.shortcuts.hasSequence(mode));
   useEffect(() => {
     active.current = true;
     return () => {
@@ -606,7 +606,7 @@ function Editor({
     { id: "search", search: "搜索描述工具" },
     ...["一", "二", "三", "四", "五", "六"].map((name, index) => {
       const depth = index + 1;
-      return option(`h${depth}`, `${name}级标题`, <Heading size={15} />, () => format(depth), `h${depth} 标题 heading`, keys[headingShortcuts[depth]]);
+      return option(`h${depth}`, `${name}级标题`, <Heading size={15} />, () => format(depth), `h${depth} 标题 heading`, mode === "live" ? keys[headingShortcuts[depth]] : undefined);
     }),
     ...(mode === "live" ? [option("paragraph", "普通段落", <Pilcrow size={15} />, () => format(0), "取消标题 paragraph", keys.paragraph)] : []),
     option("bold", "描述加粗", <Bold size={15} />, () => format("bold"), "bold 粗体", keys.bold),

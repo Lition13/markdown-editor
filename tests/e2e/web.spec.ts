@@ -228,6 +228,7 @@ test("文件管理支持新建、批量导入、搜索、重命名和删除", as
   await files.getByRole("button", { name: "确认删除", exact: true }).click();
   await expect(files.getByRole("button", { name: "读书笔记.md", exact: true })).toHaveCount(0);
   await expect(files.getByRole("button", { name: "读书笔记 (2).md", exact: true })).toHaveAttribute("aria-current", "true");
+  await expect(files.getByRole("searchbox", { name: "搜索文件名" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(files).toBeHidden();
   await expect(editor).toHaveText("第二份笔记");
