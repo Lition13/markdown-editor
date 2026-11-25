@@ -403,12 +403,17 @@ test("导入 SKILL.md 后高亮并编辑 YAML，刷新和导出保留文件头",
   });
   const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
   const outline = page.getByRole("complementary", { name: "文档大纲" });
+  const yamlKey = editor.locator(".hljs-attr", { hasText: "name:" });
   await expect(editor.locator(".cm-md-yaml-opener")).toBeVisible();
-  await expect(editor.locator(".hljs-attr", { hasText: "name:" })).toBeVisible();
+  await expect(yamlKey).toHaveCSS("color", "rgb(23, 81, 160)");
   await expect(editor.locator(".hljs-comment", { hasText: "文件头注释" })).toBeVisible();
   await expect(outline.getByRole("navigation", { name: "章节" }).getByRole("button")).toHaveText(["使用方法"]);
   await expect(page.getByRole("group", { name: "文档统计" })).toContainText("8 字词");
   await expect(page.getByRole("group", { name: "文档统计" })).toContainText("13 行");
+  const toolbar = await revealToolbar(page);
+  await toolbar.getByRole("button", { name: "切换深色主题" }).click();
+  await expect(yamlKey).toHaveCSS("color", "rgb(121, 192, 255)");
+  await page.mouse.move(520, 410);
 
   await editor.locator(".cm-line", { hasText: "version:" }).click();
   await editor.press("End");

@@ -413,14 +413,6 @@
   border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
-:is(.markdown-body, .notes-inline-editor) {
-  --md-comment: #6a737d;
-  --md-keyword: #c12745;
-  --md-string: #175e8d;
-  --md-number: #1751a0;
-  --md-title: #6f42c1;
-  --md-variable: #9a4f00;
-}
 .markdown-body {
   color: var(--text);
   font-size: var(--font-body);
@@ -846,14 +838,6 @@
   font-size: 11px;
   line-height: 1.7;
   white-space: pre-wrap;
-}
-[data-theme="dark"] :is(.markdown-body, .notes-inline-editor) {
-  --md-comment: #8b949e;
-  --md-keyword: #ff8593;
-  --md-string: #a5d6ff;
-  --md-number: #79c0ff;
-  --md-title: #d2a8ff;
-  --md-variable: #ffa657;
 }
 @media (max-width: 720px) {
   .modal.markdown-editor-modal {
