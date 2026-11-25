@@ -1,0 +1,74 @@
+import { readFile } from "node:fs/promises";
+import { expect, test } from "@playwright/test";
+
+test("打开 Markdown、编辑、刷新恢复、下载并重新打开", async ({ page }) => {
+  const source = [
+    "# 验收文档",
+    "",
+    "| 项目 | 状态 |",
+    "| --- | --- |",
+    "| 中文 | 待验收 |",
+    "",
+    "![像素样例](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=)",
+    "",
+    "\x60\x60\x60js",
+    "const value = 42;",
+    "\x60\x60\x60",
+  ].join("\n");
+  const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
+  const status = page.locator(".save-status");
+  await page.goto("./");
+  await expect(status).toHaveText("示例文档");
+  await page.getByLabel("选择 Markdown 文件").setInputFiles({
+    name: "验收.markdown", mimeType: "text/markdown", buffer: Buffer.from(source),
+  });
+  await expect(page.getByText("验收.markdown")).toBeVisible();
+  await editor.press("Control+/");
+  const edited = source.replace("待验收", "已编辑");
+  await editor.fill(edited);
+  await expect(status).toHaveText("草稿已保存");
+  await page.reload();
+  await expect(status).toHaveText("草稿已恢复");
+  await editor.press("Control+/");
+  await expect(editor).toHaveValue(edited);
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("button", { name: "下载 .md" }).click();
+  const file = await downloaded;
+  expect(file.suggestedFilename()).toBe("验收.md");
+  const content = await readFile(await file.path(), "utf8");
+  expect(content).toBe(edited);
+  await page.getByLabel("选择 Markdown 文件").setInputFiles({
+    name: file.suggestedFilename(), mimeType: "text/markdown", buffer: Buffer.from(content),
+  });
+  await expect(page.getByText("验收.md", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "预览", exact: true }).click();
+  await expect(page.getByRole("table")).toContainText("已编辑");
+  await expect(page.getByRole("img", { name: "像素样例" })).toBeVisible();
+});
+
+test("Pages 子路径通过站内资源渲染公式和 Mermaid", async ({ page, context }) => {
+  const errors: string[] = [];
+  const external: string[] = [];
+  const origin = "http://127.0.0.1:4173/";
+  await context.route("**/*", route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    external.push(url);
+    return route.abort();
+  });
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("console", message => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+  const localFont = page.waitForResponse(response =>
+    response.url().startsWith(origin + "markdown-editor/") && response.request().resourceType() === "font" && response.ok(),
+  );
+  await page.goto("./");
+  await page.getByRole("button", { name: "预览", exact: true }).click();
+  await expect(page.getByRole("table")).toBeVisible();
+  await expect(page.locator(".workspace-body:not([hidden]) .katex").first()).toBeVisible();
+  await localFont;
+  await expect(page.locator(".workspace-body:not([hidden]) .mermaid-canvas svg")).toBeVisible({ timeout: 30_000 });
+  expect(external).toEqual([]);
+  expect(errors).toEqual([]);
+});

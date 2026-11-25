@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": [
+      "vite/client"
+    ],
+    "paths": {
+      "@lition13/markdown-editor": [
+        "../../packages/markdown-editor/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "src"
+  ]
+}

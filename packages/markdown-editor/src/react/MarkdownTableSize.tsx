@@ -1,0 +1,40 @@
+import { useState } from "react";
+import type { TableSize } from "../core/markdownTable";
+
+const cells = Array.from({ length: 36 }, (_, index) => ({ rows: Math.floor(index / 6) + 1, columns: index % 6 + 1 }));
+
+export default function MarkdownTableSize({ initial, label, removedCells, onApply }: {
+  initial: TableSize;
+  label: string;
+  removedCells?: (size: TableSize) => number;
+  onApply: (size: TableSize) => void;
+}) {
+  const [rows, setRows] = useState(String(initial.rows));
+  const [columns, setColumns] = useState(String(initial.columns));
+  const [hover, setHover] = useState<TableSize | null>(null);
+  const maxRows = Math.max(200, initial.rows), maxColumns = Math.max(50, initial.columns);
+  const size = { rows: Number(rows), columns: Number(columns) };
+  const valid = Number.isInteger(size.rows) && size.rows >= 1 && size.rows <= maxRows
+    && Number.isInteger(size.columns) && size.columns >= 1 && size.columns <= maxColumns;
+  const selected = hover ?? size;
+  const removed = valid ? removedCells?.(size) ?? 0 : 0;
+  return <form className="notes-table-size" onSubmit={event => {
+    event.preventDefault();
+    if (valid) onApply(size);
+  }}>
+    <div className="notes-table-size-grid" onPointerLeave={() => setHover(null)}>
+      {cells.map(cell => {
+        const title = `${cell.rows} 行 ${cell.columns} 列`;
+        return <button type="button" key={title} title={title} aria-label={`选择 ${title}`} tabIndex={-1}
+          className={cell.rows <= selected.rows && cell.columns <= selected.columns ? "selected" : undefined}
+          onPointerEnter={() => setHover(cell)} onClick={() => { setRows(String(cell.rows)); setColumns(String(cell.columns)); }} />;
+      })}
+    </div>
+    <div className="notes-table-size-fields">
+      <label>行数（含表头）<input type="number" min={1} max={maxRows} value={rows} onChange={event => setRows(event.target.value)} /></label>
+      <label>列数<input type="number" min={1} max={maxColumns} value={columns} onChange={event => setColumns(event.target.value)} /></label>
+    </div>
+    {removed > 0 && <p className="notes-table-size-warning" role="status">将移除 {removed} 个有内容的单元格，可撤销。</p>}
+    <button type="submit" className="primary-button small" disabled={!valid}>{label}</button>
+  </form>;
+}
