@@ -109,7 +109,7 @@ export function useLibraryDrag({
   function beginPointer(event: PointerEvent<HTMLButtonElement>, entry: DraggableEntry) {
     if (disabled || !event.isPrimary || event.button !== 0) return;
     suppressClick.current = false;
-    if (event.pointerType === "touch" && !(event.target instanceof Element && event.target.closest(".file-drag-handle"))) return;
+    if (event.pointerType === "touch" && !(event.target instanceof Element && event.target.closest(".file-kind-icon"))) return;
     if (keyboard.current) return;
     const element = event.currentTarget;
     pointer.current = {

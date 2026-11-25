@@ -1,4 +1,4 @@
-import { ChevronRight, Download, FileText, Folder, FolderOpen, FolderPlus, FolderTree, GripVertical, PencilLine, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { ChevronRight, Download, FileText, Folder, FolderOpen, FolderPlus, FolderTree, PencilLine, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import SidePanel from "./SidePanel";
 import { markdownName, type FileEntry, type FolderEntry, type MarkdownFile } from "./files";
@@ -222,9 +222,8 @@ export default function FileManager({ library, open, compact, onClose }: {
                 revealFolder(parentId);
               }, true);
             }}>
-            <span className="file-drag-handle" aria-hidden="true"><GripVertical size={13} /></span>
             {!searchTerm && <span className="folder-chevron" aria-hidden="true" />}
-            <FileText size={16} className="file-kind-icon" aria-hidden="true" />
+            <span className="file-kind-icon" aria-hidden="true"><FileText size={16} /></span>
             <span className="file-list-name">
               {file.name}
               {searchTerm && parentId && (
@@ -257,9 +256,8 @@ export default function FileManager({ library, open, compact, onClose }: {
             aria-expanded={expandedHere} aria-controls={branch} aria-current={currentFolder === folder.id ? "location" : undefined}
             {...movement.rowProps({ kind: "folder", id: folder.id, name: folder.name, parentId: folder.parentId })}
             onClick={() => toggleFolder(folder.id)}>
-            <span className="file-drag-handle" aria-hidden="true"><GripVertical size={13} /></span>
             <ChevronRight size={12} className="folder-chevron" aria-hidden="true" />
-            <FolderIcon size={16} className="file-kind-icon" aria-hidden="true" />
+            <span className="file-kind-icon" aria-hidden="true"><FolderIcon size={16} /></span>
             <span className="file-list-name">{folder.name}</span>
           </button>
           <button type="button" className="icon-control file-row-tool" aria-label={"重命名文件夹 " + folder.name} title="重命名文件夹"

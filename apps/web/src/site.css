@@ -391,20 +391,19 @@ dialog.side-panel::backdrop { background: #101a3278; }
 .file-open svg { flex: none; color: var(--muted); }
 .folder-chevron { flex: 0 0 12px; }
 .file-open[aria-expanded="true"] .folder-chevron { transform: rotate(90deg); }
-.folder-row .file-kind-icon, .is-current .file-kind-icon, .file-open[aria-current="location"] { color: var(--accent); }
+.folder-row .file-kind-icon svg, .is-current .file-kind-icon svg, .file-open[aria-current="location"] { color: var(--accent); }
 .file-open[aria-current="location"] .file-list-name, .is-current .file-list-name { font-weight: 620; }
-.file-drag-handle {
+.file-kind-icon {
   display: inline-grid;
   place-items: center;
   align-self: stretch;
   flex: none;
-  width: 14px;
-  margin-inline: -4px -3px;
+  width: 16px;
   touch-action: none;
   cursor: grab;
 }
 .file-open[data-dragging="true"] { opacity: .55; cursor: grabbing; }
-.file-open[data-dragging="true"] .file-drag-handle { cursor: grabbing; }
+.file-open[data-dragging="true"] .file-kind-icon { cursor: grabbing; }
 .file-list-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-list-name small {
   display: block;
@@ -510,5 +509,5 @@ dialog.side-panel::backdrop { background: #101a3278; }
   :root { --toolbar-edge: 34px; --toolbar-row: 50px; }
   .toolbar-handle-label { display: inline; }
   .workbench-toolbar .panel-toggle, .workbench-toolbar .icon-control, .view-options button { min-height: 36px; }
-  .file-drag-handle { width: 28px; margin-inline-end: -4px; }
+  .file-kind-icon { width: 28px; }
 }
