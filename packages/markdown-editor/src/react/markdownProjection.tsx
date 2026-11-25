@@ -205,6 +205,22 @@ function project(state: EditorState, tree: Root, focused: boolean, codeLanguage:
     const raw = source.slice(from, to);
     const show = !!active(from, to);
 
+    if (node.type === "yaml") {
+      const first = state.doc.lineAt(from).number;
+      const last = state.doc.lineAt(to).number;
+      for (let number = first; number <= last; number++) {
+        const edge = number === first ? " cm-md-code-first cm-md-yaml-opener cm-md-yaml-marker"
+          : number === last ? " cm-md-code-last cm-md-yaml-marker" : "";
+        line(state.doc.line(number).from, "cm-md-code-line" + edge);
+      }
+      const bodyFrom = state.doc.line(first + 1).from;
+      const bodyTo = state.doc.line(last).from - 1;
+      for (const token of highlightCode(source.slice(bodyFrom, bodyTo), "yaml")) {
+        mark(bodyFrom + token.from, bodyFrom + token.to, token.className);
+      }
+      return;
+    }
+
     if (topLevel && node.type === "table") {
       replace(from, to, new LiveTableWidget(markdownTableLayout(source, node, from, to), readLiveTable, leaveMarkdownBlock), true);
       return;

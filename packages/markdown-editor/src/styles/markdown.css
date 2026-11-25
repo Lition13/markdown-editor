@@ -114,6 +114,12 @@
   border-end-start-radius: 6px;
   border-end-end-radius: 6px;
 }
+.notes-inline-editor .cm-md-yaml-marker { color: var(--muted); }
+.notes-inline-editor .cm-md-yaml-opener::after {
+  content: "YAML";
+  float: inline-end;
+  font-size: var(--font-label);
+}
 .notes-inline-editor .cm-line.cm-md-code-separator {
   /* CodeMirror keeps a line before the closing fence widget for cursor positions. */
   line-height: 0;

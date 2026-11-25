@@ -1,3 +1,5 @@
+import { readYamlFrontmatter } from "./markdownAst";
+
 export interface TextSelection {
   start: number;
   end: number;
@@ -6,7 +8,7 @@ export interface MarkdownEdit extends TextSelection {
   value: string;
 }
 export const normalizeMarkdown = (value: string) =>
-  value.replace(/\r\n?/g, "\n");
+  value.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
 export function clampSelection(
   value: string,
   range: TextSelection,
@@ -198,12 +200,13 @@ export function indentLines(
   value: string,
   range: TextSelection,
   outdent = false,
+  width = 4,
 ): MarkdownEdit {
   const block = lineRange(value, range),
     lines = value.slice(block.start, block.end).split("\n"),
-    changed = lines.map((line) =>
-      outdent ? line.replace(/^(?:\t| {1,4})/, "") : "    " + line,
-    ),
+    prefix = " ".repeat(width),
+    removable = new RegExp("^(?:\\t| {1," + width + "})"),
+    changed = lines.map((line) => outdent ? line.replace(removable, "") : prefix + line),
     text = changed.join("\n");
   if (range.start === range.end) {
     const caret = Math.max(
@@ -324,10 +327,12 @@ export function continueMarkdownLine(
   return null;
 }
 
-export function isInMarkdownFence(value: string, position: number) {
+export function isInMarkdownLiteralBlock(value: string, position: number) {
+  const yaml = readYamlFrontmatter(value);
+  if (yaml && position <= yaml.to) return true;
   const start = position === 0 ? 0 : value.lastIndexOf("\n", position - 1) + 1;
   let open = "";
-  for (const line of value.slice(0, start).split("\n")) {
+  for (const line of value.slice(yaml?.to ?? 0, start).split("\n")) {
     const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
     if (!match) continue;
     const [, marker, info] = match;
@@ -345,7 +350,7 @@ export function isInMarkdownFence(value: string, position: number) {
 function markdownHeading(value: string, range: TextSelection) {
   const block = lineRange(value, range);
   const line = value.slice(block.start, block.end);
-  if (line.includes("\n") || isInMarkdownFence(value, block.start)) return null;
+  if (line.includes("\n") || isInMarkdownLiteralBlock(value, block.start)) return null;
   const match = /^( {0,3})(#{1,6})(?=[\t ]|$)/.exec(line);
   if (!match) return null;
   const from = block.start + match[1].length;
@@ -386,7 +391,7 @@ export function isMarkdownIndentContext(value: string, range: TextSelection) {
     return true;
   return (
     value
-      .slice(0, range.start)
+      .slice(readYamlFrontmatter(value)?.to ?? 0, range.start)
       .split("\n")
       .filter((line) => /^\s{0,3}(?:`{3,}|~{3,})/.test(line)).length %
       2 ===

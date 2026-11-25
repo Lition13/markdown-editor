@@ -14,6 +14,10 @@ import "./site.css";
 
 const themeKey = "lition13-markdown-editor-theme";
 const statusKey = "lition13-markdown-editor-status-bar";
+const filesKey = "lition13-markdown-editor-file-panel";
+const outlineKey = "lition13-markdown-editor-outline-panel";
+const drawerKey = "lition13-markdown-editor-drawer";
+const toolbarKey = "lition13-markdown-editor-toolbar";
 const shortcutsKey = "lition13-markdown-editor-shortcuts";
 const repository = "https://github.com/Lition13/markdown-editor";
 const compactQuery = "(max-width: 840px)";
@@ -24,6 +28,23 @@ function preference(key: string) {
   } catch {
     return null;
   }
+}
+
+function savePreference(key: string, value: string) {
+  try { localStorage.setItem(key, value); } catch {}
+}
+
+function useVisibility(key: string, defaultVisible = true) {
+  const [visible, setVisible] = useState(() => {
+    const value = preference(key);
+    if (value === "visible") return true;
+    if (value === "hidden") return false;
+    return defaultVisible;
+  });
+  useLayoutEffect(() => {
+    savePreference(key, visible ? "visible" : "hidden");
+  }, [key, visible]);
+  return [visible, setVisible] as const;
 }
 
 function readTheme(): MarkdownTheme {
@@ -50,7 +71,7 @@ function useCompactLayout() {
 
 function Toolbar({ children }: { children: ReactNode }) {
   const [hovered, setHovered] = useState(false);
-  const [held, setHeld] = useState(false);
+  const [held, setHeld] = useVisibility(toolbarKey, false);
   const [keyboard, setKeyboard] = useState(false);
   const handle = useRef<HTMLButtonElement>(null);
   const visible = hovered || held || keyboard;
@@ -60,7 +81,7 @@ function Toolbar({ children }: { children: ReactNode }) {
   }
 
   return (
-    <header className="app-header" data-visible={visible}
+    <header className="app-header" data-visible={visible} data-pinned={held}
       onPointerEnter={revealFromPointer}
       onPointerMove={revealFromPointer}
       onPointerLeave={() => setHovered(false)}
@@ -77,7 +98,8 @@ function Toolbar({ children }: { children: ReactNode }) {
         handle.current?.focus({ preventScroll: true });
       }}>
       <button ref={handle} type="button" className="toolbar-handle" aria-label="顶部工具栏"
-        aria-controls="workbench-toolbar" aria-expanded={visible} onClick={() => setHeld(value => !value)}>
+        aria-controls="workbench-toolbar" aria-expanded={visible} aria-pressed={held}
+        title={held ? "取消固定顶部工具栏" : "固定顶部工具栏"} onClick={() => setHeld(value => !value)}>
         <span aria-hidden="true" className="toolbar-grip" />
         <span aria-hidden="true" className="toolbar-handle-label">工具栏</span>
       </button>
@@ -245,24 +267,26 @@ function App() {
   const library = useFileLibrary();
   const [theme, setTheme] = useState(readTheme);
   const compact = useCompactLayout();
-  const [filesVisible, setFilesVisible] = useState(true);
-  const [outlineVisible, setOutlineVisible] = useState(true);
-  const [statusOpen, setStatusOpen] = useState(() => preference(statusKey) !== "hidden");
+  const [filesVisible, setFilesVisible] = useVisibility(filesKey);
+  const [outlineVisible, setOutlineVisible] = useVisibility(outlineKey);
+  const [statusOpen, setStatusOpen] = useVisibility(statusKey);
   const [shortcuts, setShortcuts] = useState(readShortcuts);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [shortcutStorageFailed, setShortcutStorageFailed] = useState(false);
-  const [drawer, setDrawer] = useState<"files" | "outline" | null>(null);
+  const [drawer, setDrawer] = useState(() => {
+    const value = preference(drawerKey);
+    return value === "files" || value === "outline" ? value : null;
+  });
   const filesOpen = compact ? drawer === "files" : filesVisible;
   const outlineOpen = compact ? drawer === "outline" : outlineVisible;
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem(themeKey, theme); } catch {}
+    savePreference(themeKey, theme);
   }, [theme]);
-  useEffect(() => {
-    try { localStorage.setItem(statusKey, statusOpen ? "visible" : "hidden"); } catch {}
-  }, [statusOpen]);
-  useEffect(() => { if (!compact) setDrawer(null); }, [compact]);
+  useLayoutEffect(() => {
+    savePreference(drawerKey, drawer ?? "closed");
+  }, [drawer]);
 
   function showFiles() {
     if (compact) setDrawer("files");

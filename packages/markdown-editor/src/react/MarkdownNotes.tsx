@@ -39,6 +39,7 @@ import MarkdownTableSize from "./MarkdownTableSize";
 import { newMarkdownTable, serializeMarkdownTable, type TableSize } from "../core/markdownTable";
 import type { InlineMarkdownHandle, MarkdownKeystroke } from "./InlineMarkdownEditor";
 import { emptyMarkdownMarkerRange, indentListItems } from "../core/markdownList";
+import { readYamlFrontmatter } from "../core/markdownAst";
 import { suppressBackspaceRepeat } from "../core/keyboard";
 import { pairedSymbolAfterInput } from "../core/markdownPairs";
 import { formatMarkdownInline, headingForShortcut, headingShortcuts, isInlineMarkdownFormat, isNativeHistoryShortcut } from "../core/markdownShortcuts";
@@ -55,7 +56,7 @@ import {
   insertCodeBlock,
   insertMarkdownRule,
   isInMarkdownAddress,
-  isInMarkdownFence,
+  isInMarkdownLiteralBlock,
   isMarkdownIndentContext,
   markdownLink,
   normalizeMarkdown,
@@ -68,6 +69,19 @@ import {
 import type { codeLanguages } from "../core/markdownCode";
 type Snapshot = { value: string; selection: TextSelection };
 const InlineMarkdownEditor = lazy(() => import("./InlineMarkdownEditor"));
+
+function changeIndentation(value: string, range: TextSelection, outdent: boolean, explicit = false) {
+  const yaml = readYamlFrontmatter(value);
+  if (yaml && range.start <= yaml.to) {
+    return range.start >= yaml.bodyFrom && range.end <= yaml.bodyTo
+      ? indentLines(value, range, outdent, 2)
+      : null;
+  }
+  const heading = explicit ? null : changeMarkdownHeading(value, range, outdent ? -1 : 1);
+  return heading ?? indentListItems(value, range, outdent)
+    ?? (explicit || isInMarkdownLiteralBlock(value, range.start) || isMarkdownIndentContext(value, range)
+      ? indentLines(value, range, outdent) : null);
+}
 
 function textareaPoint(field: HTMLTextAreaElement, position: number) {
   const bounds = field.getBoundingClientRect();
@@ -310,7 +324,7 @@ function Editor({
   const range = () => inline.current?.selection() ?? (ref.current ? sourceSelection(ref.current) : selection.current);
   const pointAt = (position: number) => inline.current?.point(position) ?? (ref.current ? textareaPoint(ref.current, position) : undefined);
   const openTools = (bookmark: TextSelection, point: MenuPoint) => {
-    if (isInMarkdownFence(latest.current, bookmark.start)
+    if (isInMarkdownLiteralBlock(latest.current, bookmark.start)
       || isInMarkdownAddress(latest.current, bookmark.start)) return false;
     selection.current = bookmark;
     setTools(point);
@@ -417,6 +431,17 @@ function Editor({
     if (inline.current) inline.current.insertTable(source, bookmark);
     else edit(insertBlock(latest.current, bookmark, source, 2, 2));
   };
+  const editYamlFrontmatter = () => {
+    const text = latest.current;
+    const yaml = readYamlFrontmatter(text);
+    if (yaml) {
+      const start = Math.min(yaml.bodyFrom, yaml.bodyTo);
+      focusAt({ start, end: start }, "start");
+      return;
+    }
+    const start = "---\nname: ";
+    edit(insertBlock(text, { start: 0, end: 0 }, start + "\ndescription: \n---", start.length, start.length));
+  };
   const insertLink = () => {
     const safe = panel === "image" ? safeMarkdownUrl(url, "image") : resolveMarkdownLink(url, environment.normalizeLink);
     if (!safe) {
@@ -497,7 +522,7 @@ function Editor({
       } else if (mode === "live") {
         if (!inline.current?.setHeading(heading)) return false;
       } else {
-        if (typeof heading !== "number" || heading === 0 || isInMarkdownFence(latest.current, range().start)) return false;
+        if (typeof heading !== "number" || heading === 0 || isInMarkdownLiteralBlock(latest.current, range().start)) return false;
         format(heading);
       }
       event.preventDefault();
@@ -521,10 +546,9 @@ function Editor({
       } else if (shortcut === "undo" || shortcut === "redo") {
         undoEdit(shortcut === "redo");
       } else if (shortcut === "indent" || shortcut === "outdent") {
-        const value = latest.current;
-        const outdent = shortcut === "outdent";
-        edit(indentListItems(value, current, outdent) ?? indentLines(value, current, outdent));
-      } else if (!isInMarkdownFence(latest.current, current.start)) {
+        const next = changeIndentation(latest.current, current, shortcut === "outdent", true);
+        if (next) edit(next);
+      } else if (!isInMarkdownLiteralBlock(latest.current, current.start)) {
         switch (shortcut) {
           case "table": case "link": case "image":
             showPanel(shortcut);
@@ -563,7 +587,7 @@ function Editor({
     if (event.key === "Enter" && !event.shiftKey && !mod && !event.altKey) {
       const value = latest.current;
       const current = range();
-      const next = isInMarkdownFence(value, current.start) ? null
+      const next = isInMarkdownLiteralBlock(value, current.start) ? null
         : continueMarkdownHeading(value, current) ?? continueMarkdownLine(value, current);
       if (next) {
         event.preventDefault();
@@ -572,12 +596,7 @@ function Editor({
       }
     }
     if (event.key === "Tab" && !mod && !event.altKey) {
-      const value = latest.current;
-      const current = range();
-      const next = changeMarkdownHeading(value, current, event.shiftKey ? -1 : 1)
-        ?? indentListItems(value, current, event.shiftKey)
-        ?? (isInMarkdownFence(value, current.start) || isMarkdownIndentContext(value, current)
-          ? indentLines(value, current, event.shiftKey) : null);
+      const next = changeIndentation(latest.current, range(), event.shiftKey);
       if (next) {
         event.preventDefault();
         event.stopPropagation();
@@ -620,6 +639,7 @@ function Editor({
     option("link", "插入描述链接", <Link size={15} />, () => showPanel("link"), "link", keys.link),
     option("image", "插入描述图片", <ImagePlus size={15} />, () => showPanel("image"), "image", keys.image),
     option("table", "描述表格", <Table2 size={15} />, () => showPanel("table"), "table", keys.table),
+    option("yaml", "YAML 文件头", <FileCode size={15} />, editYamlFrontmatter, "frontmatter SKILL.md 元数据"),
     option("rule", "描述分隔线", <Minus size={15} />, () => format("rule"), "divider"),
     {
       id: "code", label: "描述代码块", icon: <CodeXml size={15} />, keywords: "code block", shortcut: keys.code,

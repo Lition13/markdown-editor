@@ -25,6 +25,14 @@ const render = (value: string, normalizeLink?: MarkdownOptions["normalizeLink"])
 const all = (value: string) => ({ start: 0, end: value.length });
 const end = (value: string) => ({ start: value.length, end: value.length });
 describe("Markdown 描述编辑", () => {
+  it("只读预览从正文开始，后续分隔线仍按 Markdown 渲染", () => {
+    const preview = render("---\nname: my-skill\n# 文件头注释\n---\n\n# 正文\n\n---\n\n完成。");
+    expect(preview).toContain(">正文</h1>");
+    expect(preview).toContain("<hr/>");
+    expect(preview).not.toContain("my-skill");
+    expect(preview).not.toContain("文件头注释");
+    expect(render("---\n\n# 普通文档")).toContain("<hr/>");
+  });
   it("粗体与斜体可叠加和取消，不误删另一种格式", () => {
     const bold = wrapInline("重点", all("重点"), "**");
     expect(bold.value).toBe("**重点**");

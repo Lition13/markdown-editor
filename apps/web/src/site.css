@@ -110,12 +110,16 @@ button, input, select { font: inherit; }
 .workbench {
   --left-column: 0px;
   --right-column: 0px;
+  --toolbar-space: var(--toolbar-edge);
   --canvas-height: calc(100dvh - var(--status-space));
   display: grid;
   grid-template-columns: var(--left-column) minmax(0, 1fr) var(--right-column);
   align-items: start;
   min-height: 100dvh;
   padding-bottom: var(--status-space);
+}
+.workbench:has(> .app-header[data-pinned="true"]) {
+  --toolbar-space: calc(var(--toolbar-edge) + var(--toolbar-row));
 }
 .workbench[data-files="true"] { --left-column: clamp(232px, 18vw, 272px); }
 .workbench[data-outline="true"] { --right-column: clamp(176px, 15vw, 226px); }
@@ -149,7 +153,7 @@ button, input, select { font: inherit; }
 .view-options button[aria-pressed="true"] { color: var(--text); background: var(--soft-accent); }
 .view-options button:disabled { cursor: wait; }
 .workspace-body {
-  --workspace-padding-top: max(46px, calc(var(--toolbar-edge) + 23px));
+  --workspace-padding-top: max(46px, calc(var(--toolbar-space) + 23px));
   --workspace-padding-bottom: 40px;
   max-width: 1130px;
   min-height: var(--canvas-height);
@@ -234,7 +238,7 @@ aside.side-panel {
   top: 0;
   grid-row: 1;
   height: var(--canvas-height);
-  padding-top: var(--toolbar-edge);
+  padding-top: var(--toolbar-space);
 }
 .file-manager { grid-column: 1; border-inline-end: 1px solid var(--edge); }
 .document-outline { grid-column: 3; border-inline-start: 1px solid var(--edge); }

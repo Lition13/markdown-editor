@@ -327,6 +327,116 @@ test("工作台铺满窗口，顶栏悬浮，字词和行数实时更新并记�
   await expect(stats.getByText("6 字词", { exact: true })).toBeVisible();
 });
 
+test("文件栏、大纲和顶栏在刷新与重新打开后恢复显隐", async ({ page, context }) => {
+  await page.goto("./");
+  const toolbar = page.locator("#workbench-toolbar");
+  const handle = page.getByRole("button", { name: "顶部工具栏" });
+  const files = page.locator("#file-manager");
+  const outline = page.locator("#document-outline");
+  await handle.click();
+  await files.getByRole("button", { name: "关闭文件管理" }).click();
+  await toolbar.getByRole("button", { name: "文档大纲", exact: true }).click();
+  await page.mouse.move(600, 200);
+  await expect(toolbar).toBeVisible();
+  await expect(files).toBeHidden();
+  await expect(outline).toBeHidden();
+
+  await page.reload();
+  await expect(toolbar).toBeVisible();
+  await expect(files).toBeHidden();
+  await expect(outline).toBeHidden();
+  await toolbar.getByRole("button", { name: "文件管理", exact: true }).click();
+  await expect(files).toBeVisible();
+  await handle.click();
+  await page.mouse.move(600, 200);
+  await expect(toolbar).toBeHidden();
+
+  const reopened = await context.newPage();
+  await reopened.goto("./");
+  await expect(reopened.locator("#workbench-toolbar")).toBeHidden();
+  await expect(reopened.locator("#file-manager")).toBeVisible();
+  await expect(reopened.locator("#document-outline")).toBeHidden();
+});
+
+test("窄窗恢复上次的抽屉，宽屏侧栏使用各自的显隐偏好", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("./");
+  const files = await fileManager(page);
+  const outline = page.locator("#document-outline");
+  await expect(files).toHaveAttribute("open", "");
+  await page.reload();
+  await expect(files).toHaveAttribute("open", "");
+  await files.getByRole("button", { name: "关闭文件管理" }).click();
+  await expect(files).toBeHidden();
+
+  const toolbar = await revealToolbar(page);
+  await toolbar.getByRole("button", { name: "文档大纲", exact: true }).click();
+  await expect(outline).toHaveAttribute("open", "");
+  await page.reload();
+  await expect(outline).toHaveAttribute("open", "");
+  await expect(files).toBeHidden();
+
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await expect(page.getByRole("complementary", { name: "文件管理" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "文档大纲" })).toBeVisible();
+  await outline.getByRole("button", { name: "关闭文档大纲" }).click();
+  await expect(outline).toBeHidden();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(outline).toHaveAttribute("open", "");
+  await page.keyboard.press("Escape");
+  await expect(outline).toBeHidden();
+  await page.reload();
+  await expect(outline).toBeHidden();
+  await expect(files).toBeHidden();
+});
+
+test("导入 SKILL.md 后高亮并编辑 YAML，刷新和导出保留文件头", async ({ page }) => {
+  const source = [
+    "---", "name: yaml-check", "description: |", "  首行说明", "  \x60\x60\x60md", "# 文件头注释",
+    "metadata:", "  version: '1.0'", "---", "", "# 使用方法", "", "打开文件。",
+  ].join("\n");
+  await page.goto("./");
+  const files = await fileManager(page);
+  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+    name: "SKILL.md", mimeType: "text/markdown", buffer: Buffer.from("\uFEFF" + source.replace(/\n/g, "\r\n")),
+  });
+  const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
+  const outline = page.getByRole("complementary", { name: "文档大纲" });
+  await expect(editor.locator(".cm-md-yaml-opener")).toBeVisible();
+  await expect(editor.locator(".hljs-attr", { hasText: "name:" })).toBeVisible();
+  await expect(editor.locator(".hljs-comment", { hasText: "文件头注释" })).toBeVisible();
+  await expect(outline.getByRole("navigation", { name: "章节" }).getByRole("button")).toHaveText(["使用方法"]);
+  await expect(page.getByRole("group", { name: "文档统计" })).toContainText("8 字词");
+  await expect(page.getByRole("group", { name: "文档统计" })).toContainText("13 行");
+
+  await editor.locator(".cm-line", { hasText: "version:" }).click();
+  await editor.press("End");
+  await editor.press("Enter");
+  await page.keyboard.insertText("author: a");
+  await editor.press("/");
+  await page.keyboard.insertText("b");
+  const author = editor.locator(".cm-line", { hasText: "author:" });
+  await expect.poll(() => author.textContent()).toBe("  author: a/b");
+  await editor.press("Tab");
+  await expect.poll(() => author.textContent()).toBe("    author: a/b");
+  await editor.press("Shift+Tab");
+  await expect.poll(() => author.textContent()).toBe("  author: a/b");
+
+  const edited = source.replace("  version: '1.0'", "  version: '1.0'\n  author: a/b");
+  await editor.press("Control+/");
+  await expect(editor).toHaveValue(edited);
+  await expect(page.locator(".save-status")).toHaveText("已保存到此浏览器");
+  await page.reload();
+  await expect(editor.locator(".cm-md-yaml-opener")).toBeVisible();
+  await expect(editor.locator(".cm-line", { hasText: "author:" })).toBeVisible();
+  const download = page.waitForEvent("download");
+  await files.getByRole("button", { name: "导出", exact: true }).click();
+  const exported = await download;
+  expect(exported.suggestedFilename()).toBe("SKILL.md");
+  expect(await readFile(await exported.path(), "utf8")).toBe(edited);
+});
+
 test("大纲识别实际标题，从正文和源码跳到长文档中的章节", async ({ page }) => {
   const source = [
     "# 开头", "", "\x60\x60\x60md", "## 代码块里的标题", "\x60\x60\x60", "",

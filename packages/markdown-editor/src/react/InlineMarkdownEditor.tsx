@@ -141,9 +141,9 @@ function insertLineBreak(view: EditorView, soft: boolean) {
       return;
     }
   }
-  const insideCode = block?.type === "code";
-  const indent = insideCode ? /^[\t ]*/.exec(state.sliceDoc(current.from, from))?.[0] ?? "" : "";
-  const single = soft || !current.text.trim() || insideCode || block?.type === "math" || block?.type === "html";
+  const preservesIndent = block?.type === "code" || block?.type === "yaml";
+  const indent = preservesIndent ? /^[\t ]*/.exec(state.sliceDoc(current.from, from))?.[0] ?? "" : "";
+  const single = soft || !current.text.trim() || preservesIndent || block?.type === "math" || block?.type === "html";
   const text = single ? "\n" + indent : "\n\n";
   view.dispatch(state.replaceSelection(text), { scrollIntoView: true, userEvent: "input.structure" });
 }

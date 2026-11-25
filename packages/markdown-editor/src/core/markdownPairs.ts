@@ -1,4 +1,5 @@
-import { isInMarkdownFence, replaceSelection, type TextSelection } from "./markdown";
+import { isInMarkdownLiteralBlock, replaceSelection, type TextSelection } from "./markdown";
+import { readYamlFrontmatter } from "./markdownAst";
 
 const pairs = new Map([
   ["(", ")"], ["[", "]"], ["{", "}"], ["<", ">"],
@@ -22,6 +23,8 @@ function escaped(value: string, position: number) {
 
 export function pairedSymbolChange(value: string, range: TextSelection, key: string, code = false): PairChange | undefined {
   const { start, end } = range;
+  const yaml = readYamlFrontmatter(value);
+  if (yaml && start <= yaml.to) return;
   if (key === "Backspace") {
     const opening = value.charAt(start - 1);
     const closing = pairs.get(opening);
@@ -39,7 +42,7 @@ export function pairedSymbolChange(value: string, range: TextSelection, key: str
     const previous = value.charAt(start - 1);
     // Preserve contractions, repeated quotes and fences, and angle operators in code.
     if ((key === "'" && /[a-z0-9_]/i.test(previous)) || (key === closing && previous === key)
-      || (key === "<" && (code || isInMarkdownFence(value, start)))) return;
+      || (key === "<" && (code || isInMarkdownLiteralBlock(value, start)))) return;
   }
   return { from: start, to: end, insert: key + value.slice(start, end) + closing, start: start + 1, end: end + 1 };
 }

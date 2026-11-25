@@ -82,6 +82,24 @@ const fixture = [
   "<details><summary>更多</summary><kbd>Ctrl</kbd> 安全 HTML</details>",
 ].join("\n\n");
 
+test("斜杠菜单可在文档开头插入 YAML 模板，已有文件头时跳回编辑", async ({ page }) => {
+  await ready(page);
+  const body = "# 写作\n\n正文。";
+  await notes(page).fill(body);
+  await notes(page).press("Control+End");
+  await command(page, "YAML 文件头");
+  await page.keyboard.insertText("new-skill");
+  const expected = "---\nname: new-skill\ndescription: \n---\n\n" + body;
+  await expect(notes(page)).toHaveValue(expected);
+  await notes(page).press("Control+/");
+  await expect(rendered(page).locator(".cm-md-yaml-opener")).toBeVisible();
+  await notes(page).press("Control+End");
+  await command(page, "YAML 文件头");
+  await expect.poll(() => caretLine(page)).toBe("name: new-skill");
+  await notes(page).press("Control+/");
+  await expect(notes(page)).toHaveValue(expected);
+});
+
 test("正文、源码和表格单元格共享成对符号编辑", async ({ page }) => {
   await ready(page);
   const editor = notes(page);

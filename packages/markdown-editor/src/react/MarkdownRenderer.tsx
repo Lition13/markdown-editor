@@ -1,4 +1,5 @@
 import Markdown, { type Components, type ExtraProps } from "react-markdown";
+import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import remarkMath from "remark-math";
@@ -249,7 +250,7 @@ export default function MarkdownRenderer({
     <SourceContext.Provider value={{ source, onChange, renderTableCell }}>
       <div className={`markdown-body ${className}`}>
         <Markdown
-          remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
+          remarkPlugins={[remarkFrontmatter, remarkGfm, remarkBreaks, remarkMath]}
           remarkRehypeOptions={markdownFootnotes}
           rehypePlugins={[
             rehypeRaw,
