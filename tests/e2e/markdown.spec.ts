@@ -559,6 +559,57 @@ test("退格从表格下方进入末格，长按保留内容", async ({ page }) 
   await expect.poll(() => saved(page)).toBe(original.replace("完成", "完"));
 });
 
+test("空首格再次按退格删除整张表格，长按保护正文并可撤销", async ({ page }) => {
+  await ready(page);
+  const markdown = "| X | 状态 |\n| :--- | ---: |\n| 另一行 |   |";
+  const original = ["表格上方", markdown, "表格下方"].join("\n\n");
+  const emptyHeader = original.replace("| X |", "|  |");
+  await notes(page).fill(original);
+  await command(page, "实时编辑描述");
+
+  const table = rendered(page).getByRole("table");
+  const first = table.getByRole("textbox", { name: "编辑表格第 1 行第 1 列", exact: true });
+  const last = table.getByRole("textbox", { name: "编辑表格第 2 行第 2 列", exact: true });
+  await table.getByText("X", { exact: true }).click();
+  await first.press("Home");
+  await first.press("Backspace");
+  await expect(first).toHaveValue("X");
+  await first.press("End");
+  try {
+    await page.keyboard.down("Backspace");
+    await expect(first).toHaveValue("");
+    await page.keyboard.down("Backspace");
+    await expect(table).toBeVisible();
+  } finally {
+    await page.keyboard.up("Backspace");
+  }
+
+  await first.press("ArrowDown");
+  await page.keyboard.press("Tab");
+  await expect(last).toHaveValue("");
+  await last.press("Backspace");
+  await expect(table).toBeVisible();
+
+  await notes(page).press("Control+Home");
+  await page.keyboard.press("ArrowDown");
+  await expect(first).toBeFocused();
+  try {
+    await page.keyboard.down("Backspace");
+    await expect(table).toHaveCount(0);
+    await expect(notes(page)).toBeFocused();
+    await page.keyboard.down("Backspace");
+    await expect.poll(() => saved(page)).toBe("表格上方\n\n\n\n表格下方");
+  } finally {
+    await page.keyboard.up("Backspace");
+  }
+  await page.keyboard.press("Control+z");
+  await expect(table).toBeVisible();
+  await expect.poll(() => saved(page)).toBe(emptyHeader);
+
+  await table.getByRole("columnheader").first().locator(".notes-table-cell").press("Backspace");
+  await expect(table).toHaveCount(0);
+});
+
 test("从下方退格进入多行标题、代码和公式的最后一行", async ({ page }) => {
   await ready(page);
   const examples = [
@@ -816,10 +867,21 @@ test("Ctrl+Alt+T 和键入表头可创建指定尺寸的表格并聚焦单元格
   await command(page, "实时编辑描述");
   await page.keyboard.press("Control+Alt+t");
   const picker = page.getByRole("dialog", { name: "插入表格", exact: true });
+  const rows = picker.getByRole("spinbutton", { name: "行数（含表头）" });
+  const columns = picker.getByRole("spinbutton", { name: "列数" });
+  await expect(rows).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(columns).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(rows).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(columns).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(rows).toBeFocused();
   await picker.getByRole("button", { name: "选择 2 行 3 列", exact: true }).click();
-  await expect(picker.getByRole("spinbutton", { name: "行数（含表头）" })).toHaveValue("2");
-  await expect(picker.getByRole("spinbutton", { name: "列数", exact: true })).toHaveValue("3");
-  await picker.getByRole("button", { name: "插入表格", exact: true }).click();
+  await expect(rows).toHaveValue("2");
+  await expect(columns).toHaveValue("3");
+  await columns.press("Enter");
   const table = page.locator(".notes-live-document").getByRole("table");
   await expect(table.getByRole("row")).toHaveCount(2);
   await expect(table.getByRole("columnheader")).toHaveCount(3);
@@ -837,6 +899,23 @@ test("Ctrl+Alt+T 和键入表头可创建指定尺寸的表格并聚焦单元格
   await page.keyboard.press("Enter");
   await expect(table.getByRole("textbox", { name: "编辑表格第 2 行第 1 列", exact: true })).toBeFocused();
   expect(await saved(page)).toBe(`序言\n\n${header}\n| --- | --- |\n|   |   |\n\n后续`);
+});
+
+test("源码模式的插表面板可从行数框按回车提交有效尺寸", async ({ page }) => {
+  await ready(page);
+  await notes(page).fill("");
+  await command(page, "描述表格");
+  const picker = page.getByRole("dialog", { name: "插入表格", exact: true });
+  const rows = picker.getByRole("spinbutton", { name: "行数（含表头）" });
+  await expect(rows).toBeFocused();
+  await rows.fill("0");
+  await page.keyboard.press("Enter");
+  await expect(picker).toBeVisible();
+  await expect(notes(page)).toHaveValue("");
+  await rows.fill("2");
+  await page.keyboard.press("Enter");
+  await expect(picker).toBeHidden();
+  await expect(notes(page)).toHaveValue("|  |  |\n| --- | --- |\n|  |  |\n");
 });
 
 test("表格行列菜单和快捷键可调整结构与对齐，缩小后可撤销", async ({ page }) => {

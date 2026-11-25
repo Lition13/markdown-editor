@@ -3,6 +3,7 @@ import { AlignCenter, AlignLeft, AlignRight, MoreHorizontal, Table2 } from "luci
 import { useCallback, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
+import { suppressBackspaceRepeat } from "../core/keyboard";
 import { cellsRemovedByResize, changeMarkdownTable, serializeMarkdownTable, tableCellChange, tableModel, type MarkdownTable, type TableCellAddress, type TableCellRange, type TableCommand, type TableLayout } from "../core/markdownTable";
 import { pairedSymbolAfterInput } from "../core/markdownPairs";
 import { formatMarkdownInline, isInlineMarkdownFormat, isNativeHistoryShortcut, type MarkdownShortcutAction } from "../core/markdownShortcuts";
@@ -184,8 +185,7 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
     else closePanel();
   };
 
-  const removeTable = () => {
-    const location = current();
+  const removeTable = (location = current()) => {
     if (!location) return;
     closePanel(false);
     setEditing(null);
@@ -299,6 +299,24 @@ function EditableTable({ view, host, layout, read, leaveTable }: {
         startEditing(row, column, event);
       }}
       onKeyDown={event => {
+        if (event.defaultPrevented || event.nativeEvent.isComposing || compositionStart.current !== null) return;
+        if (row === 0 && column === 0 && event.key === "Backspace"
+          && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+          && event.target === (entry ? field.current : event.currentTarget)) {
+          const location = current();
+          if (!location) return;
+          const { table } = location;
+          const range = table.rows[0].cells[0];
+          const source = range ? table.source.slice(range.from, range.to) : "";
+          if (source.trim() || (entry && field.current?.value.trim())) return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (!event.repeat) {
+            suppressBackspaceRepeat(environment.surface, environment.overlay);
+            removeTable(location);
+          }
+          return;
+        }
         if (entry || event.key !== "Enter" || event.target !== event.currentTarget) return;
         event.preventDefault();
         startEditing(row, column);

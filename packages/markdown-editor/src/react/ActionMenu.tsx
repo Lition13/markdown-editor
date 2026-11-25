@@ -57,6 +57,7 @@ function MenuLevel({
   anchor,
   dialog = false,
   autoFocus = false,
+  initialFocus,
   className,
   search,
   closeLabel = "关闭编辑工具",
@@ -71,6 +72,7 @@ function MenuLevel({
   anchor?: HTMLElement;
   dialog?: boolean;
   autoFocus?: boolean;
+  initialFocus?: string;
   className?: string;
   search?: MenuSearch;
   closeLabel?: string;
@@ -132,8 +134,9 @@ function MenuLevel({
     const selector = dialog
       ? ".menu-custom-content input:not(:disabled), .menu-custom-content button:not(:disabled)"
       : "input,button:not(:disabled)";
-    (ref.current?.querySelector<HTMLElement>(selector) ?? ref.current)?.focus({ preventScroll: true });
-  }, [autoFocus, dialog]);
+    const target = initialFocus && ref.current?.querySelector<HTMLElement>(initialFocus);
+    (target || ref.current?.querySelector<HTMLElement>(selector) || ref.current)?.focus({ preventScroll: true });
+  }, [autoFocus, dialog, initialFocus]);
   const openChild = (item: ActionItem, button: HTMLElement, focus = false) => {
     const rect = button.getBoundingClientRect();
     setChild({
@@ -362,6 +365,7 @@ export default function ActionMenu({
   label = "右键菜单",
   anchor,
   dialog = false,
+  initialFocus,
   className,
   search,
   closeLabel,
@@ -373,6 +377,7 @@ export default function ActionMenu({
   label?: string;
   anchor?: HTMLElement;
   dialog?: boolean;
+  initialFocus?: string;
   className?: string;
   search?: MenuSearch;
   closeLabel?: string;
@@ -418,6 +423,7 @@ export default function ActionMenu({
       label={label}
       anchor={anchor}
       dialog={dialog}
+      initialFocus={initialFocus}
       className={className}
       search={search}
       closeLabel={closeLabel}

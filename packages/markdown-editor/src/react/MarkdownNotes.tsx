@@ -759,6 +759,7 @@ function Editor({
       {panel && panelPoint && (
         <ActionMenu
           dialog
+          initialFocus={panel === "table" ? ".notes-table-size-fields input" : undefined}
           label={panelLabel}
           closeLabel={panel === "help" ? "关闭语法帮助" : "关闭插入面板"}
           className="notes-command-panel"
@@ -766,7 +767,7 @@ function Editor({
           onClose={closePanel}
           items={[{
             id: "description-panel",
-            content: panel === "table" ? <MarkdownTableSize initial={{ rows: 3, columns: 2 }} label="插入表格" onApply={insertTable} /> : panel === "help" ? (
+            content: panel === "table" ? <MarkdownTableSize initial={{ rows: 3, columns: 2 }} label="插入表格" cycleFields onApply={insertTable} /> : panel === "help" ? (
               <div className="notes-help-panel">
                 <pre>{"# 一级标题 · ## 二级标题\n**加粗**  *斜体*  ~~删除线~~\n`行内代码`\n- 无序列表\n1. 有序列表\n- [ ] 未完成  - [x] 已完成\n> 引用\n[文字](https://example.com)\n![图片说明](图片地址)\n| 标题 | 标题 |\n| --- | --- |\n| 内容 | 内容 |\n$行内公式$ · $$块级公式$$\n脚注[^1]\n[^1]: 脚注内容"}</pre>
                 <p>输入 / 搜索工具和对应快捷键。带 → 的组合先按左边，再按右边。{keys.table && `${keys.table} 插入表格。`}连续输入 // 插入 /。列表内回车续写，空列表项回车退出。支持粘贴或拖入本地图片。</p>
