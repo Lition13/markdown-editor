@@ -120,7 +120,9 @@ test("源码占用同一块正文区，长文档随页面滚动", async ({ page 
   const modes = page.getByRole("group", { name: "文档视图" });
   const liveMode = modes.getByRole("button", { name: "编辑", exact: true });
   const sourceMode = modes.getByRole("button", { name: "源码", exact: true });
-  await revealToolbar(page);
+  const toolbar = await revealToolbar(page);
+  await toolbar.getByRole("button", { name: "状态栏", exact: true }).click();
+  await expect(page.locator("#workspace-status")).toBeVisible();
   await expect(sourceMode).toBeEnabled();
   const files = await fileManager(page);
   await files.getByLabel("选择 Markdown 文件").setInputFiles({
