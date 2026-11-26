@@ -516,6 +516,7 @@ test("在线版切换中英文后保留文档、撤销历史和浏览器偏好",
   await expect(page).toHaveTitle("Markdown Editor");
   await expect(files.getByRole("heading", { name: "File manager", exact: true })).toBeVisible();
   await expect(files.getByRole("button", { name: "验收笔记.md", exact: true })).toBeVisible();
+  await expect(files.getByRole("button", { name: "Getting started.md", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Document outline", exact: true })).toBeVisible();
   await expect(page.locator("#document-outline").getByRole("button", { name: "保留标题", exact: true })).toBeVisible();
   const source = page.getByRole("textbox", { name: "Markdown document", exact: true });
@@ -542,6 +543,80 @@ test("在线版切换中英文后保留文档、撤销历史和浏览器偏好",
   await language.selectOption("zh-CN");
   await expect(root).toHaveAttribute("lang", "zh-CN");
   await expect(page).toHaveTitle("Markdown 编辑器");
+});
+
+test("用英文界面打开并导出英文入门示例，编辑和删除后保留文件操作", async ({ page }) => {
+  await page.goto("./");
+  const files = await fileManager(page);
+  const toolbar = await revealToolbar(page);
+  const chineseSample = page.getByRole("heading", { name: "开始写作", exact: true });
+  const englishSample = page.getByRole("heading", { name: "Getting started", exact: true });
+  async function chooseEnglish() {
+    await revealToolbar(page);
+    await toolbar.getByRole("combobox", { name: "界面语言", exact: true }).selectOption("en");
+  }
+  async function chooseChinese() {
+    await page.getByRole("button", { name: "Top toolbar", exact: true }).hover();
+    await toolbar.getByRole("combobox", { name: "Interface language", exact: true }).selectOption("zh-CN");
+  }
+
+  await expect(chineseSample).toBeVisible();
+  await chooseEnglish();
+  await expect(englishSample).toBeVisible();
+  await expect(page.locator(".save-status")).toHaveText("Example document");
+  await expect(files.getByRole("button", { name: "入门示例.md", exact: true })).toBeVisible();
+  await expect(files.getByRole("button", { name: "Getting started.md", exact: true })).toHaveAttribute("aria-current", "true");
+  const download = page.waitForEvent("download");
+  await files.getByRole("button", { name: "Export", exact: true }).click();
+  const exported = await download;
+  expect(exported.suggestedFilename()).toBe("Getting started.md");
+  const markdown = await readFile(await exported.path(), "utf8");
+  expect(markdown).toContain("| Insert a table | Ctrl+Alt+T |");
+  expect(markdown).toContain("A[Import Markdown] --> B[Edit the document]");
+  expect(markdown).not.toMatch(/\p{Script=Han}/u);
+
+  await chooseChinese();
+  await expect(chineseSample).toBeVisible();
+  await chooseEnglish();
+  await expect(englishSample).toBeVisible();
+  await page.getByRole("button", { name: "Top toolbar", exact: true }).hover();
+  await toolbar.getByRole("button", { name: "Source", exact: true }).click();
+  const edited = "# My edited example\n\nKeep this text across language changes.";
+  await page.getByRole("textbox", { name: "Markdown document", exact: true }).fill(edited);
+  await expect(page.locator(".save-status")).toHaveText("Saved in this browser");
+  await chooseChinese();
+  await expect(page.getByRole("textbox", { name: "Markdown 正文", exact: true })).toHaveValue(edited);
+  await chooseEnglish();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "My edited example", exact: true })).toBeVisible();
+
+  await files.getByRole("button", { name: "Delete Getting started.md", exact: true }).click();
+  await files.getByRole("button", { name: "Confirm deletion", exact: true }).click();
+  await expect(chineseSample).toBeVisible();
+  await page.reload();
+  await expect(chineseSample).toBeVisible();
+  await expect(files.getByRole("button", { name: "Getting started.md", exact: true })).toHaveCount(0);
+});
+
+test("升级时为已选英文的浏览器补齐入门示例，保留同名个人文件", async ({ page }) => {
+  await page.goto("./");
+  const files = await fileManager(page);
+  const personal = "# Personal document\n\nThis file already existed.";
+  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+    name: "Getting started.md", mimeType: "text/markdown", buffer: Buffer.from(personal),
+  });
+  await expect(page.getByRole("heading", { name: "Personal document", exact: true })).toBeVisible();
+  await files.getByRole("button", { name: "入门示例.md", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "开始写作", exact: true })).toBeVisible();
+  await page.evaluate(() => localStorage.setItem("lition13-markdown-editor-locale", "en"));
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Getting started", exact: true })).toBeVisible();
+  await expect(files.getByRole("button", { name: "Getting started (2).md", exact: true })).toHaveAttribute("aria-current", "true");
+  await files.getByRole("button", { name: "Getting started.md", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Personal document", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Personal document", exact: true })).toBeVisible();
+  await expect(files.getByRole("button", { name: "Getting started (2).md", exact: true })).toHaveCount(1);
 });
 
 test("英文覆盖快捷键、主题、斜杠菜单和全屏内的编辑工具", async ({ page }) => {

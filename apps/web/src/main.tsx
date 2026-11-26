@@ -306,8 +306,8 @@ function Workspace({
 }
 
 function App() {
-  const library = useFileLibrary();
   const [locale, setLocale] = useState<MarkdownLocale>(() => preference(localeKey) === "en" ? "en" : "zh-CN");
+  const library = useFileLibrary(locale);
   const t = webTranslator(locale);
   const [appearance, setAppearance] = useState(readTheme);
   const [themeSettingsOpen, setThemeSettingsOpen] = useState(false);

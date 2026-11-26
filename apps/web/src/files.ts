@@ -1,4 +1,5 @@
-import { example } from "./example";
+import type { MarkdownLocale } from "@lition13/markdown-editor";
+import { englishExample, example } from "./example";
 import type { WebMessage } from "./locale";
 
 export class FileLibraryError extends Error {
@@ -10,6 +11,7 @@ export interface FileEntry {
   name: string;
   revision: number;
   folderId?: string | null;
+  exampleName?: string;
 }
 
 export interface FolderEntry {
@@ -36,16 +38,19 @@ const foldersStore = "folders";
 const textStore = "contents";
 const settingsStore = "settings";
 const activeKey = "active-file";
+const englishExampleKey = "english-example-added";
 const nameOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 let connection: Promise<IDBDatabase> | undefined;
 
 export const exampleFile: MarkdownFile = { id: "example", revision: 0, ...example };
+const englishExampleFile: MarkdownFile = { id: "example-en", revision: 0, ...englishExample };
+export const exampleIds: Record<MarkdownLocale, string> = { "zh-CN": exampleFile.id, en: englishExampleFile.id };
 const previousExamples = new Set(["Ctrl+T", "Ctrl+Shift+Enter"].map(key =>
   example.value.replace("| 插入表格 | Ctrl+Alt+T |", `| 插入表格 | ${key} |`)));
 const nameKey = (name: string) => name.normalize("NFC").toLowerCase();
 
-export function fileEntry({ id, name, revision, folderId }: FileEntry): FileEntry {
-  return { id, name, revision, folderId };
+export function fileEntry({ id, name, revision, folderId, exampleName }: FileEntry): FileEntry {
+  return { id, name, revision, folderId, ...(exampleName ? { exampleName } : {}) };
 }
 
 export function sortByName<T extends { name: string }>(entries: T[]) {
@@ -81,6 +86,17 @@ function reserveFileName(name: string, names: Set<string>) {
 
 function namesInFolder(files: FileEntry[], folderId: string | null) {
   return new Set(files.filter(file => (file.folderId ?? null) === folderId).map(file => nameKey(file.name)));
+}
+
+export function createEnglishExample(files: FileEntry[]): MarkdownFile {
+  const name = reserveFileName(englishExampleFile.name, namesInFolder(files, null));
+  return { ...englishExampleFile, name, exampleName: name };
+}
+
+export function isOriginalExample(file: MarkdownFile | null) {
+  if (!file || file.revision !== 0 || file.folderId != null) return false;
+  const original = file.id === exampleFile.id ? exampleFile : file.id === englishExampleFile.id ? englishExampleFile : undefined;
+  return !!original && file.name === (file.exampleName ?? original.name) && file.value === original.value;
 }
 
 export function newFiles(inputs: FileInput[], existing: FileEntry[], folderId: string | null): MarkdownFile[] {
@@ -262,6 +278,36 @@ export function readLibrary(): Promise<FileLibrary> {
     const files = sortByName(entries);
     const entry = files.find(file => file.id === active) ?? files[0];
     return { files, folders: sortByName(folders), current: entry ? await withText(tx, entry) : null };
+  });
+}
+
+// The source callback sees the current tab's document and any pending edits.
+// undefined means the language change should leave the current selection alone.
+export function syncExampleLanguage(locale: MarkdownLocale, openExisting: boolean, source: () => MarkdownFile | null | undefined) {
+  return transaction("readwrite", async tx => {
+    const settings = tx.objectStore(settingsStore);
+    const entries = await read<FileEntry[]>(tx.objectStore(filesStore).getAll());
+    let entry = entries.find(file => file.id === exampleIds[locale]);
+    let added: MarkdownFile | undefined;
+    if (locale === "en" && !entry && !await read(settings.get(englishExampleKey))) {
+      added = createEnglishExample(entries);
+      putFile(tx, added);
+      settings.put(true, englishExampleKey);
+      entry = fileEntry(added);
+    }
+
+    const from = source();
+    if (!entry || from === undefined || from?.id === entry.id) return { entry };
+    if (!added && !openExisting && await read(settings.get(activeKey)) !== entry.id) return { entry };
+    const target = added ?? await withText(tx, entry);
+    if (!isOriginalExample(target)) return { entry };
+    if (from) {
+      const previous = entries.find(file => file.id === from.id);
+      if (!previous || !isOriginalExample(await withText(tx, previous))) return { entry };
+    }
+    if (source() !== from) return { entry };
+    settings.put(target.id, activeKey);
+    return { entry, selection: { from, target } };
   });
 }
 

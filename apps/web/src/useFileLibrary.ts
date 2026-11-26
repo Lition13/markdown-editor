@@ -1,8 +1,10 @@
+import type { MarkdownLocale } from "@lition13/markdown-editor";
 import { useEffect, useRef, useState } from "react";
 import {
-  addFiles, addFolder, exampleFile, FileLibraryError, fileEntry, folderRemoval, movedFile, movedFolder, moveFile, moveFolder, newFiles, newFolder,
+  addFiles, addFolder, createEnglishExample, exampleFile, exampleIds, FileLibraryError, fileEntry, folderRemoval, isOriginalExample,
+  movedFile, movedFolder, moveFile, moveFolder, newFiles, newFolder,
   openFile, readLibrary, removeFile, removeFolder, renamedFile, renamedFolder, renameFile, renameFolder,
-  saveContent, sortByName, type FileEntry, type FileInput, type FolderEntry, type MarkdownFile,
+  saveContent, sortByName, syncExampleLanguage, type FileEntry, type FileInput, type FolderEntry, type MarkdownFile,
 } from "./files";
 import type { WebMessage } from "./locale";
 
@@ -12,7 +14,7 @@ interface PendingEdit {
   saving: boolean;
 }
 
-export function useFileLibrary() {
+export function useFileLibrary(locale: MarkdownLocale) {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [folders, setFolders] = useState<FolderEntry[]>([]);
   const [current, setCurrent] = useState<MarkdownFile | null>(null);
@@ -21,7 +23,12 @@ export function useFileLibrary() {
   const [progress, setProgress] = useState<Partial<Record<string, WebMessage | null>>>({});
   const active = useRef<MarkdownFile | null>(null);
   const memory = useRef<Map<string, string> | null>(null);
+  const memoryEnglishExampleAdded = useRef(false);
   const pending = useRef(new Map<string, PendingEdit>());
+  const currentLocale = useRef(locale);
+  const previousLocale = useRef<MarkdownLocale | undefined>(undefined);
+  const exampleQueue = useRef(Promise.resolve());
+  currentLocale.current = locale;
 
   function show(file: MarkdownFile | null) {
     active.current = file;
@@ -51,6 +58,46 @@ export function useFileLibrary() {
     });
     return () => { mounted = false; };
   }, []);
+
+  useEffect(() => {
+    if (!ready || previousLocale.current === locale) return;
+    const openExisting = previousLocale.current !== undefined;
+    previousLocale.current = locale;
+    if (!openExisting && locale === "zh-CN") return;
+
+    function source() {
+      if (currentLocale.current !== locale) return;
+      const file = active.current;
+      if (file && (!isOriginalExample(file) || pending.current.has(file.id))) return;
+      return file;
+    }
+
+    const content = memory.current;
+    if (content) {
+      let target = files.find(file => file.id === exampleIds[locale]);
+      if (!target && locale === "en" && !memoryEnglishExampleAdded.current) {
+        const example = createEnglishExample(files);
+        memoryEnglishExampleAdded.current = true;
+        content.set(example.id, example.value);
+        target = fileEntry(example);
+        setFiles(previous => sortByName([...previous, fileEntry(example)]));
+      }
+      if (!target) return;
+      const from = source();
+      const file = { ...target, value: content.get(target.id) ?? "" };
+      if (from !== undefined && from?.id !== file.id && isOriginalExample(file)) show(file);
+      return;
+    }
+
+    exampleQueue.current = exampleQueue.current.then(async () => {
+      if (currentLocale.current !== locale) return;
+      const { entry, selection } = await syncExampleLanguage(locale, openExisting, source);
+      if (entry) {
+        setFiles(previous => sortByName([...previous.filter(file => file.id !== entry.id), entry]));
+      }
+      if (selection && active.current === selection.from) show(selection.target);
+    }).catch(() => {});
+  }, [files, locale, ready]);
 
   function markSave(id: string, state: WebMessage | null | undefined) {
     setProgress(previous => {
@@ -189,7 +236,7 @@ export function useFileLibrary() {
   else if (activeSave === null) status = "正在保存…";
   else if (unsavedIds.length) status = "有文件尚未保存";
   else if (!current) status = "暂无文件";
-  else if (current.id === exampleFile.id && current.revision === 0 && current.name === exampleFile.name) {
+  else if (isOriginalExample(current)) {
     status = "示例文档";
   }
 
