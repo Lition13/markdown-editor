@@ -42,7 +42,7 @@ export function indexFiles(files: FileEntry[], folders: FolderEntry[]) {
   }).sort((left, right) => fileOrder.compare(left.name, right.name) || fileOrder.compare(left.path, right.path));
 }
 
-function matchRank(text: string, token: string) {
+export function matchRank(text: string, token: string) {
   if (text === token) return 0;
   if (text.startsWith(token)) return 1;
   if (text.includes(token)) return 2;

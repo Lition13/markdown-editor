@@ -9,6 +9,7 @@ const panelDefinitions = {
   outline: { label: "切换文档大纲", key: "Ctrl+Alt+O" },
   files: { label: "切换文件管理", key: "Ctrl+Alt+F" },
   quickOpen: { label: "快速打开文件", key: "Ctrl+P" },
+  commands: { label: "打开命令面板", key: "Ctrl+Shift+P" },
 } as const;
 type PanelShortcutAction = keyof typeof panelDefinitions;
 type WorkbenchShortcutAction = MarkdownShortcutAction | PanelShortcutAction;

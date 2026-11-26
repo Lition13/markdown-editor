@@ -228,18 +228,21 @@ export function movedFolder(folders: FolderEntry[], id: string, parentId: string
   return { ...folder, parentId, name: reserveName(folder.name, "", names) };
 }
 
-export function folderRemoval(folders: FolderEntry[], files: FileEntry[], id: string) {
-  const removed = folders.find(folder => folder.id === id);
-  if (!removed) throw new FileLibraryError("这个文件夹已被移除。");
-  const folderNames = new Set(folders.filter(folder => folder.parentId === removed.parentId && folder.id !== id).map(folder => nameKey(folder.name)));
-  const fileNames = namesInFolder(files, removed.parentId);
-  const movedFolders = folders.filter(folder => folder.parentId === id).map(folder => ({
-    ...folder, parentId: removed.parentId, name: reserveName(folder.name, "", folderNames),
-  }));
-  const movedFiles = files.filter(file => file.folderId === id).map(file => ({
-    ...file, folderId: removed.parentId, name: reserveFileName(file.name, fileNames),
-  }));
-  return { removed, movedFolders, movedFiles };
+export function planFolderRemoval(id: string, folders: FolderEntry[], files: FileEntry[]) {
+  const removed = folderContents(id, folders, files);
+  const folderIds = new Set(removed.folders.map(folder => folder.id));
+  const fileIds = new Set(removed.files.map(file => file.id));
+  return {
+    parentId: removed.root.parentId,
+    folderIds,
+    fileIds,
+    folders: sortByName(folders.filter(folder => !folderIds.has(folder.id))),
+    files: sortByName(files.filter(file => !fileIds.has(file.id))),
+  };
+}
+
+export function nextFileAfterRemoval(files: readonly FileEntry[], folderId: string | null) {
+  return files.find(file => (file.folderId ?? null) === folderId) ?? files[0];
 }
 
 function putFile(transaction: IDBTransaction, file: MarkdownFile) {
@@ -479,8 +482,7 @@ export function removeFile(id: string, currentId: string | undefined): Promise<P
     ]);
     const remaining = sortByName(entries.filter(file => file.id !== id));
     const removedFolder = entries.find(file => file.id === id)?.folderId ?? null;
-    const next = remaining.find(file => file.id === currentId)
-      ?? remaining.find(file => (file.folderId ?? null) === removedFolder) ?? remaining[0];
+    const next = remaining.find(file => file.id === currentId) ?? nextFileAfterRemoval(remaining, removedFolder);
     files.delete(id);
     tx.objectStore(textStore).delete(id);
     if (id === currentId || id === active) {
@@ -528,18 +530,32 @@ export function moveFolder(id: string, parentId: string | null): Promise<FolderE
   });
 }
 
-export function removeFolder(id: string): Promise<ReturnType<typeof folderRemoval>> {
+export function removeFolder(id: string, currentId: string | undefined) {
   return transaction("readwrite", async tx => {
     const files = tx.objectStore(filesStore);
     const folders = tx.objectStore(foldersStore);
-    const [folderEntries, fileEntries] = await Promise.all([
+    const contents = tx.objectStore(textStore);
+    const settings = tx.objectStore(settingsStore);
+    const [folderEntries, fileEntries, active] = await Promise.all([
       read<FolderEntry[]>(folders.getAll()), read<FileEntry[]>(files.getAll()),
+      read<string | undefined>(settings.get(activeKey)),
     ]);
-    const result = folderRemoval(folderEntries, fileEntries, id);
-    for (const folder of result.movedFolders) folders.put(folder);
-    for (const file of result.movedFiles) files.put(file);
-    folders.delete(id);
-    return result;
+    const result = planFolderRemoval(id, folderEntries, fileEntries);
+    for (const folderId of result.folderIds) folders.delete(folderId);
+    for (const fileId of result.fileIds) {
+      files.delete(fileId);
+      contents.delete(fileId);
+    }
+
+    let current: MarkdownFile | null = null;
+    if ((currentId && result.fileIds.has(currentId)) || (active && result.fileIds.has(active))) {
+      const next = result.files.find(file => file.id === currentId) ?? nextFileAfterRemoval(result.files, result.parentId);
+      if (next) {
+        current = await withText(tx, next);
+        settings.put(next.id, activeKey);
+      } else settings.delete(activeKey);
+    }
+    return { ...result, current };
   });
 }
 

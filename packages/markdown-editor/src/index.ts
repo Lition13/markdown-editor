@@ -9,4 +9,4 @@ export {
 export {
   checkMarkdownShortcutKey, editorShortcutPrefix, markdownShortcutFromEvent, normalizeMarkdownShortcut, type MarkdownShortcutIssue,
 } from "./core/shortcutKeys";
-export type { MarkdownEditorHandle, MarkdownEditorProps, MarkdownMode, MarkdownOptions, MarkdownPreviewProps, MarkdownTheme } from "./react/editorContext";
+export type { MarkdownEditorCommand, MarkdownEditorHandle, MarkdownEditorProps, MarkdownMode, MarkdownOptions, MarkdownPreviewProps, MarkdownTheme } from "./react/editorContext";

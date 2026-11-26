@@ -1,9 +1,9 @@
 import type { MarkdownLocale } from "@lition13/markdown-editor";
 import { useEffect, useRef, useState } from "react";
 import {
-  addFiles, addFolder, exampleFiles, FileLibraryError, fileEntry, folderContents, folderRemoval, importLibraryFiles, isOriginalExample,
-  movedFile, movedFolder, moveFile, moveFolder, newFiles, newFolder,
-  openFile, planLibraryImport, readFileForExport, readFolderForExport, readLibrary, removeFile, removeFolder, renamedFile, renamedFolder,
+  addFiles, addFolder, exampleFiles, FileLibraryError, fileEntry, folderContents, importLibraryFiles, isOriginalExample,
+  movedFile, movedFolder, moveFile, moveFolder, newFiles, newFolder, nextFileAfterRemoval,
+  openFile, planFolderRemoval, planLibraryImport, readFileForExport, readFolderForExport, readLibrary, removeFile, removeFolder, renamedFile, renamedFolder,
   renameFile, renameFolder, saveContent, sortByName, syncExampleLanguage,
   type FileEntry, type FileInput, type FolderEntry, type LibraryImport, type MarkdownFile,
 } from "./files";
@@ -240,10 +240,28 @@ export function useFileLibrary(preferredLocale: MarkdownLocale | null) {
   }
 
   async function deleteFolder(id: string) {
-    const result = memory.current ? folderRemoval(folders, files, id) : await removeFolder(id);
-    const moved = new Map(result.movedFolders.map(folder => [folder.id, folder]));
-    setFolders(previous => sortByName(previous.filter(folder => folder.id !== id).map(folder => moved.get(folder.id) ?? folder)));
-    updateEntries(result.movedFiles);
+    const content = memory.current;
+    let result;
+    if (content) {
+      const removal = planFolderRemoval(id, folders, files);
+      for (const fileId of removal.fileIds) content.delete(fileId);
+      const next = nextFileAfterRemoval(removal.files, removal.parentId);
+      result = { ...removal, current: next ? { ...next, value: content.get(next.id) ?? "" } : null };
+    } else result = await removeFolder(id, active.current?.id);
+
+    for (const fileId of result.fileIds) pending.current.delete(fileId);
+    if (result.fileIds.size) {
+      setProgress(previous => {
+        const next = { ...previous };
+        for (const fileId of result.fileIds) delete next[fileId];
+        return next;
+      });
+    }
+    setFolders(result.folders);
+    setFiles(result.files);
+    const currentId = active.current?.id;
+    if (currentId && result.fileIds.has(currentId)) select(result.current);
+    return { parentId: result.parentId, folderIds: result.folderIds };
   }
 
   async function remove(id: string) {
@@ -254,7 +272,7 @@ export function useFileLibrary(preferredLocale: MarkdownLocale | null) {
       setFiles(remaining);
       if (id === currentId) {
         const removedFolder = active.current?.folderId ?? null;
-        const next = remaining.find(file => (file.folderId ?? null) === removedFolder) ?? remaining[0];
+        const next = nextFileAfterRemoval(remaining, removedFolder);
         show(next ? { ...next, value: memory.current.get(next.id) ?? "" } : null);
       }
     } else {

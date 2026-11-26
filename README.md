@@ -12,7 +12,7 @@ A new file library opens **Getting started.md** by default. The example walks th
 
 - The toolbar, file manager, outline, and status bar start hidden. Move the pointer to the top edge to reveal the toolbar, or click or tap the edge to pin it. Hover over an icon for its label. The browser remembers which panels are open and whether the toolbar is pinned.
 - The online interface starts in English and remembers your language choice. Use the language menu in the toolbar to switch to Simplified Chinese. While an original example is open, switching languages opens the matching example.
-- The file manager shows a searchable folder tree. Drag files and folders to move them, or use Shift+Space to choose a destination from the keyboard. On touch screens, drag from the file or folder icon.
+- The file manager shows a searchable folder tree. Drag files and folders to move them, or use Shift+Space to choose a destination from the keyboard. On touch screens, drag from the file or folder icon. Confirming a folder deletion also removes all its files and subfolders.
 - Ctrl+Alt+F opens the file manager and focuses its search box. Use the arrow keys to browse and Enter to open a file or expand a folder. Ctrl+P opens **Quick Open** to search by name or path, then Enter opens the selected file. Returning to a file in the same tab restores the last editing position. The outline highlights the current section as you scroll in either edit mode.
 - **Import** accepts `.md`, `.markdown`, `.txt`, and `.zip` and places them in the selected folder. ZIP import preserves folders, including empty ones, and reads text files in UTF-8. Matching folders merge and files with the same name get numbered suffixes. Each ZIP and the combined extracted text must be at most 100 MiB, with up to 10,000 entries per import and up to 128 path components per entry.
 - Files are saved in the current browser with IndexedDB. The export button next to each rename button downloads a Markdown copy of the file or a ZIP of the folder. Older saved drafts are imported into the file library.
@@ -29,10 +29,13 @@ A new file library opens **Getting started.md** by default. The example walks th
 | Show or hide the document outline | Ctrl+Alt+O |
 | Show or hide the file manager | Ctrl+Alt+F |
 | Quickly open a file by name or path | Ctrl+P |
+| Search and run commands | Ctrl+Shift+P |
 | Undo or redo | Ctrl+Z / Ctrl+Y |
 | Exit fullscreen editing | Esc |
 
 Type `/` to find text formatting, lists, task checkboxes, links, images, tables, code blocks, formulas, Mermaid diagrams, and syntax help. Search for **YAML front matter** to insert a `name` and `description` template or jump to the existing header. You can edit the YAML at the top of documents such as `SKILL.md`.
+
+Open **Command Palette** with Ctrl+Shift+P or the terminal icon in the toolbar. Search by command name or shortcut, select with the arrow keys, then press Enter. Use it to open or import files, switch views and themes, insert a table, or undo an edit.
 
 In a code block, Enter keeps the current indentation and expands paired brackets onto separate lines. Use Tab or Shift+Tab to adjust indentation. The code toolbar lets you change the language, copy the code, or continue writing below the block. Add local images with the image picker, paste, or drag and drop. KaTeX and Mermaid render in the workspace, including SVG rendering for Mermaid Event Modeling.
 

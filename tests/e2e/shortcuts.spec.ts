@@ -277,7 +277,7 @@ test("文件管理快捷键可开关侧栏和抽屉，修改后刷新保留", as
   await expect(files).toBeHidden();
 });
 
-test("快速打开快捷键可重新绑定，并检测与文件管理的冲突", async ({ page }) => {
+test("快速打开与命令面板的快捷键可重新绑定并检测冲突", async ({ page }) => {
   await page.goto("./");
   await expect(notes(page)).toBeVisible();
   const settings = await openSettings(page);
@@ -290,6 +290,15 @@ test("快速打开快捷键可重新绑定，并检测与文件管理的冲突",
   await expect(save).toBeDisabled();
   await input.fill("Ctrl+Shift+F8");
   await save.click();
+  const paletteForm = await editShortcut(settings, "打开命令面板");
+  const paletteInput = paletteForm.getByRole("textbox", { name: "快捷键组合", exact: true });
+  const paletteSave = paletteForm.getByRole("button", { name: "保存", exact: true });
+  await expect(paletteInput).toHaveValue("Ctrl+Shift+P");
+  await paletteInput.fill("Ctrl+Shift+F8");
+  await expect(paletteForm.getByRole("alert")).toHaveText("与「快速打开文件」的快捷键冲突。");
+  await expect(paletteSave).toBeDisabled();
+  await paletteInput.fill("Ctrl+Shift+F9");
+  await paletteSave.click();
   await closeSettings(settings);
   await page.reload();
   await expect(notes(page)).toBeVisible();
@@ -297,6 +306,10 @@ test("快速打开快捷键可重新绑定，并检测与文件管理的冲突",
   await expect(page.getByRole("combobox", { name: "输入文件名或路径", exact: true })).toBeFocused();
   await page.keyboard.press("Control+Shift+F8");
   await expect(page.getByRole("dialog", { name: "快速打开文件", exact: true })).toBeHidden();
+  await page.keyboard.press("Control+Shift+F9");
+  await expect(page.getByRole("combobox", { name: "搜索命令", exact: true })).toBeFocused();
+  await page.keyboard.press("Control+Shift+F9");
+  await expect(page.getByRole("dialog", { name: "命令面板", exact: true })).toBeHidden();
 });
 
 test("升级后保留占用文件管理默认键的旧大纲绑定", async ({ page }) => {

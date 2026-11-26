@@ -940,7 +940,7 @@ test("大纲识别实际标题，从正文和源码跳到长文档中的章节",
   await expect.poll(() => editor.evaluate(field => (field as HTMLTextAreaElement).selectionStart)).toBe(0);
 });
 
-test("目录树沿用旧版文件库，创建子文件夹、移动同名文件和删除后保留原文", async ({ page }) => {
+test("目录树沿用旧版文件库，创建子文件夹、移动同名文件并删除整棵目录树", async ({ page }) => {
   const legacy = { id: "old-file", name: "记录.md", value: "旧版文件内容" };
   await page.route("**/markdown-editor/seed-v2", route => route.fulfill({ contentType: "text/html", body: "<!doctype html>" }));
   await page.goto("./seed-v2");
@@ -960,6 +960,13 @@ test("目录树沿用旧版文件库，创建子文件夹、移动同名文件�
   const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
   await expect(editor).toHaveText(legacy.value);
 
+  await createLibraryFolder(files, "保留目录");
+  await files.getByLabel("选择 Markdown 或 ZIP 文件").setInputFiles({
+    name: "保留.md", mimeType: "text/markdown", buffer: Buffer.from("保留目录的正文"),
+  });
+  await expect(editor).toHaveText("保留目录的正文");
+  const root = files.getByRole("button", { name: "文件库", exact: true });
+  await root.click();
   const project = await createLibraryFolder(files, "项目");
   const meeting = await createLibraryFolder(files, "会议");
   const documents = meeting.locator("xpath=../..");
@@ -982,16 +989,32 @@ test("目录树沿用旧版文件库，创建子文件夹、移动同名文件�
   await page.reload();
   await expect(documents.getByRole("button", { name: "记录 (2).md", exact: true })).toBeVisible();
   await expect(editor).toHaveText(legacy.value);
-  await files.getByRole("button", { name: "文件库", exact: true }).click();
-  await files.getByRole("button", { name: "删除文件夹 项目", exact: true }).click();
-  await files.getByRole("button", { name: "确认删除", exact: true }).click();
-  await expect(files.getByRole("button", { name: "项目", exact: true })).toHaveCount(0);
-  await files.getByRole("button", { name: "删除文件夹 会议", exact: true }).click();
-  await files.getByRole("button", { name: "确认删除", exact: true }).click();
-  await files.getByRole("button", { name: "记录.md", exact: true }).click();
-  await expect(editor).toHaveText("刚导入的不同正文");
-  await files.getByRole("button", { name: "记录 (2).md", exact: true }).click();
+  const removeProject = files.getByRole("button", { name: "删除文件夹 项目", exact: true });
+  const confirm = files.getByRole("button", { name: "确认删除", exact: true });
+  const cancel = files.getByRole("button", { name: "取消", exact: true });
+  await removeProject.click();
+  await expect(files.getByText("永久删除「项目」及其中的所有文件和子文件夹？", { exact: true })).toBeVisible();
+  await expect(cancel).toBeFocused();
+  await cancel.click();
   await expect(editor).toHaveText(legacy.value);
+  await expect(meeting).toBeVisible();
+  await removeProject.click();
+  await confirm.click();
+  await expect(root).toHaveAttribute("aria-current", "location");
+  await expect(files.getByRole("button", { name: "项目", exact: true })).toHaveCount(0);
+  await expect(meeting).toHaveCount(0);
+  await files.getByRole("searchbox", { name: "搜索文件名", exact: true }).fill("记录");
+  await expect(files.getByText("没有匹配的文件", { exact: true })).toBeVisible();
+  await expect(editor).toHaveText("保留目录的正文");
+  await page.reload();
+  await expect(editor).toHaveText("保留目录的正文");
+  await expect(project).toHaveCount(0);
+  await files.getByRole("button", { name: "删除文件夹 保留目录", exact: true }).click();
+  await confirm.click();
+  const empty = page.getByRole("heading", { name: "暂无 Markdown 文件", exact: true });
+  await expect(empty).toBeVisible();
+  await page.reload();
+  await expect(empty).toBeVisible();
 });
 
 test("目录树可拖入折叠文件夹或拖回根目录，原有子目录和文档随行", async ({ page }) => {

@@ -45,7 +45,7 @@ import { readYamlFrontmatter } from "../core/markdownAst";
 import { codeIndentBackspace, codeIndentWidth, codeLineBreak, editableCodeFence } from "../core/markdownCodeEditing";
 import { suppressBackspaceRepeat } from "../core/keyboard";
 import { pairedSymbolAfterInput } from "../core/markdownPairs";
-import { formatMarkdownInline, headingForShortcut, headingShortcuts, isInlineMarkdownFormat, isNativeHistoryShortcut } from "../core/markdownShortcuts";
+import { formatMarkdownInline, headingForShortcut, headingShortcuts, isInlineMarkdownFormat, isNativeHistoryShortcut, type MarkdownShortcutAction } from "../core/markdownShortcuts";
 import { editorShortcutPrefix } from "../core/shortcutKeys";
 import { useMarkdownKeySequence } from "./useMarkdownKeySequence";
 import { completedSymbolPair } from "./markdownPairComposition";
@@ -338,8 +338,8 @@ function Editor({
   };
   const sourceSelection = (field: HTMLTextAreaElement) => ({ start: field.selectionStart, end: field.selectionEnd });
   const range = () => inline.current?.selection() ?? (ref.current ? sourceSelection(ref.current) : selection.current);
-  const toggleFullscreen = () => {
-    selection.current = range();
+  const toggleFullscreen = (bookmark = range()) => {
+    selection.current = bookmark;
     onExpand?.();
   };
   useImperativeHandle(editorRef, () => ({
@@ -372,6 +372,7 @@ function Editor({
     openFullscreen() {
       if (!expanded) toggleFullscreen();
     },
+    executeCommand: runCommand,
   }));
   const pointAt = (position: number) => inline.current?.point(position) ?? (ref.current ? textareaPoint(ref.current, position) : undefined);
   const openTools = (bookmark: TextSelection, point: MenuPoint) => {
@@ -464,8 +465,8 @@ function Editor({
         ),
       );
   };
-  const showPanel = (kind: "link" | "image" | "help" | "table") => {
-    selection.current = range();
+  const showPanel = (kind: "link" | "image" | "help" | "table", bookmark = range()) => {
+    selection.current = bookmark;
     const point = tools ?? pointAt(selection.current.end);
     if (!point) return;
     setPanelPoint(point);
@@ -554,6 +555,34 @@ function Editor({
       if (file.current) file.current.value = "";
     }
   };
+  function runCommand(command: MarkdownShortcutAction, bookmark?: TextSelection) {
+    switch (command) {
+      case "source":
+        selection.current = bookmark ?? range();
+        onMode(mode === "live" ? "source" : "live");
+        break;
+      case "expand":
+        if (!onExpand) return false;
+        toggleFullscreen(bookmark);
+        break;
+      case "undo": case "redo":
+        if (bookmark) selection.current = bookmark;
+        undoEdit(command === "redo");
+        break;
+      case "help":
+        showPanel("help", bookmark);
+        break;
+      case "table": {
+        const tableSelection = bookmark ?? range();
+        if (!isInMarkdownLiteralBlock(latest.current, tableSelection.start)) showPanel("table", tableSelection);
+        break;
+      }
+      default:
+        return false;
+    }
+    return true;
+  }
+
   const handleKey = (event: MarkdownKeystroke, composing: boolean) => {
     if (composing) {
       keySequence.reset();
@@ -583,23 +612,14 @@ function Editor({
       if (shortcut === "expand" && !onExpand) return false;
       event.preventDefault();
       event.stopPropagation();
-      if (event.repeat) return true;
+      if (event.repeat || runCommand(shortcut)) return true;
       const current = range();
-      if (shortcut === "source") {
-        selection.current = current;
-        onMode(mode === "live" ? "source" : "live");
-      } else if (shortcut === "expand") {
-        toggleFullscreen();
-      } else if (shortcut === "help") {
-        showPanel("help");
-      } else if (shortcut === "undo" || shortcut === "redo") {
-        undoEdit(shortcut === "redo");
-      } else if (shortcut === "indent" || shortcut === "outdent") {
+      if (shortcut === "indent" || shortcut === "outdent") {
         const next = changeIndentation(latest.current, current, shortcut === "outdent", true);
         if (next) edit(next);
       } else if (!isInMarkdownLiteralBlock(latest.current, current.start)) {
         switch (shortcut) {
-          case "table": case "link": case "image":
+          case "link": case "image":
             showPanel(shortcut);
             break;
           case "bold": case "italic": case "strike": case "inline": case "bullet": case "ordered":

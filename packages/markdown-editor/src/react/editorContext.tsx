@@ -5,12 +5,14 @@ import { resolveMarkdownShortcuts, type MarkdownShortcutOverrides } from "../cor
 
 export type MarkdownTheme = "light" | "dark";
 export type MarkdownMode = "live" | "source";
+export type MarkdownEditorCommand = "source" | "expand" | "undo" | "redo" | "table" | "help";
 
 export interface MarkdownEditorHandle {
   focusAt(offset: number): void;
   getSelection(): TextSelection;
   anchorAtViewport(y: number, offsets: readonly number[]): number | null;
   openFullscreen(): void;
+  executeCommand?(command: MarkdownEditorCommand, selection?: TextSelection): void;
 }
 
 export interface MarkdownOptions {

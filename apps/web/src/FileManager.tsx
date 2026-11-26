@@ -1,5 +1,5 @@
 import { ChevronRight, Download, FileText, Folder, FolderOpen, FolderPlus, FolderTree, PencilLine, Plus, Search, Trash2, Upload, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import SidePanel from "./SidePanel";
 import { makeFolderZip, readImportFiles } from "./fileArchives";
 import { useResultNavigation } from "./fileSearch";
@@ -17,6 +17,11 @@ type FileAction =
   | { type: "delete-folder"; folder: FolderEntry };
 
 const expandedFoldersKey = "lition13-markdown-editor-expanded-folders";
+
+export type FileManagerCommand = "new" | "new-folder" | "import";
+export interface FileManagerHandle {
+  executeCommand(command: FileManagerCommand): void;
+}
 
 function readExpandedFolders() {
   try {
@@ -55,7 +60,8 @@ function groupByFolder<T>(entries: T[], parentId: (entry: T) => string | null) {
   return groups;
 }
 
-export default function FileManager({ library, open, compact, onClose, onOpenFile, searchFocusRequest }: {
+export default function FileManager({ ref, library, open, compact, onClose, onOpenFile, searchFocusRequest }: {
+  ref?: Ref<FileManagerHandle>;
   library: ReturnType<typeof useFileLibrary>;
   open: boolean;
   compact: boolean;
@@ -156,6 +162,14 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
     return () => cancelAnimationFrame(frame);
   }, [open, searchFocusRequest]);
 
+  useImperativeHandle(ref, () => ({
+    executeCommand(command) {
+      if (locked.current || !ready) return;
+      if (command === "import") chooseImport();
+      else begin({ type: command }, null);
+    },
+  }));
+
   useEffect(() => {
     if (!action) return;
     if (action.type === "delete" || action.type === "delete-folder") cancelButton.current?.focus();
@@ -165,7 +179,7 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
     }
   }, [action]);
 
-  function begin(next: FileAction, button: HTMLButtonElement) {
+  function begin(next: FileAction, button: HTMLButtonElement | null) {
     movement.reset();
     previousControl.current = button;
     setError("");
@@ -174,6 +188,13 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
     if (next.type === "new") setName(t("未命名.md"));
     if (next.type === "new-folder") setName(t("新建文件夹"));
     setAction(next);
+  }
+
+  function chooseImport() {
+    movement.reset();
+    setAction(null);
+    setError("");
+    fileInput.current?.click();
   }
 
   function dismissAction() {
@@ -356,12 +377,7 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
           <button type="button" className="button" title={placementTitle} disabled={busy || !ready} onClick={event => begin({ type: "new-folder" }, event.currentTarget)}>
             <FolderPlus size={16} aria-hidden="true" />{t("新建文件夹")}
           </button>
-          <button type="button" className="button" title={placementTitle} disabled={busy || !ready} onClick={() => {
-            movement.reset();
-            setAction(null);
-            setError("");
-            fileInput.current?.click();
-          }}>
+          <button type="button" className="button" title={placementTitle} disabled={busy || !ready} onClick={chooseImport}>
             <Upload size={16} aria-hidden="true" />{t("导入")}
           </button>
           <input
@@ -405,7 +421,7 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
         {deleting ? (
           <div className="file-action">
             {action.type === "delete" ? <p>{t("删除「{name}」？", { name: action.file.name })}</p>
-              : <p>{t("删除「{name}」？其中的文件和子文件夹会移到上一级。", { name: action.folder.name })}</p>}
+              : <p>{t("永久删除「{name}」及其中的所有文件和子文件夹？", { name: action.folder.name })}</p>}
             <div className="file-action-buttons">
               <button type="button" className="button" ref={cancelButton} disabled={busy} onClick={dismissAction}>{t("取消")}</button>
               <button type="button" className="button danger" disabled={busy}
@@ -413,14 +429,9 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
                   void run(async () => {
                     if (action.type === "delete") await library.remove(action.file.id);
                     else {
-                      const { id, parentId } = action.folder;
-                      await library.deleteFolder(id);
-                      if (currentFolder === id) setFolderId(parentId);
-                      setOpenFolders(previous => {
-                        const next = new Set(previous ?? expanded);
-                        next.delete(id);
-                        return next;
-                      });
+                      const { parentId, folderIds } = await library.deleteFolder(action.folder.id);
+                      if (currentFolder && folderIds.has(currentFolder)) setFolderId(parentId);
+                      setOpenFolders(previous => new Set([...(previous ?? expanded)].filter(id => !folderIds.has(id))));
                     }
                   });
                 }}>{t("确认删除")}</button>

@@ -9,6 +9,89 @@ const zipFile = (entries: Record<string, string>) => ({
   buffer: Buffer.from(zipSync(Object.fromEntries(Object.entries(entries).map(([path, text]) => [path, strToU8(text)])))),
 });
 
+test("命令面板可按名称和快捷键搜索，执行编辑与撤销", async ({ page }) => {
+  await page.goto("./");
+  const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
+  await editor.focus();
+  const palette = page.getByRole("dialog", { name: "命令面板", exact: true });
+  const search = palette.getByRole("combobox", { name: "搜索命令", exact: true });
+  const selected = palette.getByRole("option", { selected: true });
+  await page.keyboard.press("Control+Shift+p");
+  await expect(search).toBeFocused();
+  await search.fill("no-such-command");
+  await expect(palette.getByRole("status")).toHaveText("没有匹配的命令");
+  await search.fill("切换编辑与源码");
+  await expect(selected).toContainText("切换编辑与源码");
+  await selected.click();
+  await expect(palette).toBeHidden();
+  const source = page.locator("textarea.notes-editor-textarea");
+  await expect(source).toBeFocused();
+  await source.fill("正文");
+  await source.press("End");
+
+  await page.keyboard.press("Control+Shift+p");
+  await search.fill("> Ctrl+Alt+T");
+  await expect(selected).toContainText("插入表格");
+  await page.keyboard.press("Enter");
+  const table = page.getByRole("dialog", { name: "插入表格", exact: true });
+  const rows = table.getByRole("spinbutton", { name: "行数（含表头）" });
+  await expect(rows).toBeFocused();
+  await rows.fill("2");
+  await rows.press("Enter");
+  await expect(source).toHaveValue(/正文\n\n\|.*\|/);
+
+  await page.keyboard.press("Control+Shift+p");
+  await search.fill("撤销");
+  await expect(selected).toContainText("撤销");
+  await page.keyboard.press("Enter");
+  await expect(source).toHaveValue("正文");
+  await expect(source).toBeFocused();
+});
+
+test("窄窗命令面板支持方向键、新建和导入，可切换到快速打开", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 720 });
+  await page.goto("./");
+  const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
+  await expect(editor).toBeVisible();
+  const palette = page.getByRole("dialog", { name: "命令面板", exact: true });
+  const search = palette.getByRole("combobox", { name: "搜索命令", exact: true });
+  const selected = palette.getByRole("option", { selected: true });
+  await page.keyboard.press("Control+Shift+p");
+  await expect(search).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(selected).toHaveText("新建文件");
+  await page.keyboard.press("ArrowUp");
+  await expect(selected).toContainText("快速打开文件");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  const files = page.getByRole("dialog", { name: "文件管理", exact: true });
+  await expect(palette).toBeHidden();
+  await expect(files.getByRole("textbox", { name: "新建文件名", exact: true })).toBeFocused();
+  await files.getByRole("button", { name: "取消", exact: true }).click();
+  await page.keyboard.press("Control+Alt+f");
+  await expect(files).toBeHidden();
+
+  await page.keyboard.press("Control+Shift+p");
+  await search.fill("导入 ZIP");
+  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), search.press("Enter")]);
+  await chooser.setFiles({ name: "命令导入.md", mimeType: "text/markdown", buffer: Buffer.from("# 命令导入") });
+  await expect(files).toBeHidden();
+  await expect(page.getByRole("heading", { name: "命令导入", exact: true })).toBeVisible();
+
+  await editor.focus();
+  const quickOpen = page.getByRole("dialog", { name: "快速打开文件", exact: true });
+  await page.keyboard.press("Control+p");
+  await expect(quickOpen).toBeVisible();
+  await page.keyboard.press("Control+Shift+p");
+  await expect(search).toBeFocused();
+  await expect(quickOpen).toBeHidden();
+  await page.keyboard.press("Control+p");
+  await expect(quickOpen).toBeVisible();
+  await expect(palette).toBeHidden();
+  await page.keyboard.press("Escape");
+  await expect(editor).toBeFocused();
+});
+
 test("文件管理快捷键聚焦搜索框，空搜索可用方向键打开文件", async ({ page }) => {
   await page.goto("./");
   const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });

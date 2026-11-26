@@ -477,6 +477,19 @@ dialog.side-panel::backdrop { background: #101a3278; }
 .quick-open-name, .quick-open-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .quick-open-name:not(:last-child) { max-width: 65%; flex: none; }
 .quick-open-path { color: var(--muted); font-size: .8rem; }
+.palette-command-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-command-key {
+  flex: none;
+  max-width: 48%;
+  overflow: hidden;
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  padding: 2px 5px;
+  color: var(--muted);
+  font-size: .75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .quick-open-empty, .quick-open-error { margin: 0; padding: 12px; color: var(--muted); font-size: .875rem; }
 .quick-open-error { color: var(--error); }
 .file-action {

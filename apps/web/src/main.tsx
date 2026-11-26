@@ -1,12 +1,13 @@
 import {
-  inspectMarkdown, MarkdownEditor, markdownShortcutFromEvent,
-  type MarkdownEditorHandle, type MarkdownLocale, type MarkdownMode, type MarkdownOutlineItem, type MarkdownShortcutOverrides, type MarkdownTheme,
+  getMarkdownShortcutBindings, getMarkdownShortcutCommands, inspectMarkdown, MarkdownEditor, markdownShortcutFromEvent,
+  type MarkdownEditorCommand, type MarkdownEditorHandle, type MarkdownLocale, type MarkdownMode, type MarkdownOutlineItem, type MarkdownShortcutOverrides, type MarkdownTheme,
 } from "@lition13/markdown-editor";
-import { CodeXml, FileText, FolderOpen, Github, Keyboard, ListTree, Moon, Palette, PanelBottom, PencilLine, Sun, X } from "lucide-react";
+import { CodeXml, FileText, FolderOpen, Github, Keyboard, ListTree, Moon, Palette, PanelBottom, PencilLine, Sun, Terminal, X } from "lucide-react";
 import { StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "@lition13/markdown-editor/style.css";
-import FileManager from "./FileManager";
+import CommandPalette, { type PaletteCommand } from "./CommandPalette";
+import FileManager, { type FileManagerCommand, type FileManagerHandle } from "./FileManager";
 import LanguageMenu from "./LanguageMenu";
 import { defaultWebLocale, formatDocumentCount, useWebLocale, useWebText, WebLocale, webTranslator } from "./locale";
 import QuickOpen from "./QuickOpen";
@@ -30,6 +31,8 @@ const repository = "https://github.com/Lition13/markdown-editor";
 const compactQuery = "(max-width: 840px)";
 
 type FileOpenRequest = { id: string; keyboard: boolean; alreadyOpen: boolean };
+type PickerId = "quick-open" | "command-palette";
+const documentCommands: readonly MarkdownEditorCommand[] = ["source", "expand", "undo", "redo", "table", "help"];
 
 function preference(key: string) {
   try {
@@ -126,7 +129,7 @@ function Toolbar({ children, onLocaleChange }: { children: ReactNode; onLocaleCh
 function Workspace({
   library, theme, customThemeActive, toggleTheme, showThemeSettings, compact, filesOpen, outlineOpen, statusOpen, showFiles,
   toggleFiles, toggleOutline, closeOutline, toggleStatus, shortcuts, filesShortcut, outlineShortcut, showShortcuts, onLocaleChange,
-  fileOpenRequest,
+  fileOpenRequest, commands, commandShortcut, showCommands, closeCommands, closeDrawer,
 }: {
   library: ReturnType<typeof useFileLibrary>;
   theme: MarkdownTheme;
@@ -148,6 +151,11 @@ function Workspace({
   showShortcuts: () => void;
   onLocaleChange: (locale: MarkdownLocale) => void;
   fileOpenRequest: FileOpenRequest | null;
+  commands: readonly PaletteCommand[] | null;
+  commandShortcut: string | null;
+  showCommands: () => void;
+  closeCommands: () => void;
+  closeDrawer: () => void;
 }) {
   const locale = useWebLocale();
   const t = webTranslator(locale);
@@ -231,6 +239,22 @@ function Workspace({
     setView(previous => ({ ...previous, mode }));
   }
 
+  function executeEditorCommand(command: MarkdownEditorCommand, close: () => void) {
+    const selection = editor.current?.getSelection();
+    close();
+    const run = () => editor.current?.executeCommand?.(command, selection);
+    if (compact && (filesOpen || outlineOpen)) {
+      closeDrawer();
+      requestAnimationFrame(run);
+    } else run();
+  }
+
+  const editorCommands = commands && current ? getMarkdownShortcutCommands(locale).flatMap(item => {
+    const command = documentCommands.find(id => id === item.id);
+    return command ? [{ id: command, label: item.label, shortcut: getMarkdownShortcutBindings(command, shortcuts[command])[0],
+      run: (close: () => void) => executeEditorCommand(command, close) }] : [];
+  }) : [];
+
   function jump(heading: MarkdownOutlineItem) {
     setView(previous => ({ ...previous, headingOffset: heading.offset }));
     if (compact) {
@@ -285,6 +309,11 @@ function Workspace({
           title={statusOpen ? t("隐藏状态栏") : t("显示状态栏")} aria-controls="workspace-status" aria-pressed={statusOpen}
           onClick={toggleStatus}>
           <PanelBottom size={16} aria-hidden="true" />
+        </button>
+        <button type="button" className="icon-control" aria-label={t("打开命令面板")}
+          title={commandShortcut ? t("打开命令面板") + ` (${commandShortcut})` : t("打开命令面板")}
+          aria-haspopup="dialog" disabled={!ready} onClick={showCommands}>
+          <Terminal size={18} aria-hidden="true" />
         </button>
         <button type="button" className="icon-control" aria-label={t("快捷键设置")} title={t("快捷键设置")} aria-haspopup="dialog" onClick={showShortcuts}>
           <Keyboard size={18} aria-hidden="true" />
@@ -354,6 +383,7 @@ function Workspace({
           )}
       </footer>
       {!statusOpen && <span role="status" className="visually-hidden">{t(status)}</span>}
+      {commands && <CommandPalette commands={[...commands, ...editorCommands]} onClose={closeCommands} />}
     </>
   );
 }
@@ -377,11 +407,12 @@ function App() {
   const [statusOpen, setStatusOpen] = useVisibility(statusKey);
   const [shortcuts, setShortcuts] = useState(readShortcuts);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [quickOpen, setQuickOpen] = useState(false);
+  const [picker, setPicker] = useState<PickerId | null>(null);
   const [shortcutStorageFailed, setShortcutStorageFailed] = useState(false);
   const [fileOpenRequest, setFileOpenRequest] = useState<FileOpenRequest | null>(null);
   const [searchFocusRequest, setSearchFocusRequest] = useState(0);
   const filesReturnFocus = useRef<HTMLElement | null>(null);
+  const fileManager = useRef<FileManagerHandle>(null);
   const [drawer, setDrawer] = useState(() => {
     const value = preference(drawerKey);
     return value === "files" || value === "outline" ? value : null;
@@ -391,6 +422,7 @@ function App() {
   const filesShortcut = getPanelShortcut("files", shortcuts);
   const outlineShortcut = getPanelShortcut("outline", shortcuts);
   const quickOpenShortcut = getPanelShortcut("quickOpen", shortcuts);
+  const commandShortcut = getPanelShortcut("commands", shortcuts);
   const toggleFiles = useCallback(() => {
     if (compact) setDrawer(current => current === "files" ? null : "files");
     else setFilesVisible(visible => !visible);
@@ -411,24 +443,30 @@ function App() {
   }, [filesOpen, toggleFiles]);
   useEffect(() => { if (!filesOpen) filesReturnFocus.current = null; }, [filesOpen]);
 
+  const togglePicker = useCallback((id: PickerId) => {
+    const current = document.querySelector<HTMLDialogElement>("#quick-open[open], #command-palette[open]");
+    if (current?.getAttribute("aria-busy") === "true") return;
+    current?.close();
+    if (current?.id !== id) setPicker(id);
+  }, []);
+
+  function closePicker(id: PickerId) {
+    setPicker(current => current === id ? null : current);
+  }
+
   useEffect(() => {
     const panelKeys = new Map<string, { id: string; toggle: () => void }>();
     if (filesShortcut && library.ready) panelKeys.set(filesShortcut, { id: "file-manager", toggle: toggleFilesWithKeyboard });
     if (outlineShortcut) panelKeys.set(outlineShortcut, { id: "document-outline", toggle: toggleOutline });
-    if (quickOpenShortcut && library.ready) panelKeys.set(quickOpenShortcut, {
-      id: "quick-open",
-      toggle() {
-        const picker = document.querySelector<HTMLDialogElement>("#quick-open[open]");
-        if (!picker) setQuickOpen(true);
-        else if (picker.getAttribute("aria-busy") !== "true") picker.close();
-      },
-    });
+    if (quickOpenShortcut && library.ready) panelKeys.set(quickOpenShortcut, { id: "quick-open", toggle: () => togglePicker("quick-open") });
+    if (commandShortcut && library.ready) panelKeys.set(commandShortcut, { id: "command-palette", toggle: () => togglePicker("command-palette") });
     if (!panelKeys.size) return;
     function onPanelKey(event: KeyboardEvent) {
       if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
       const panel = panelKeys.get(markdownShortcutFromEvent(event));
       if (!panel) return;
-      const allowed = panel.id === "quick-open" ? "#quick-open, #file-manager, #document-outline, .markdown-editor-modal" : "#" + panel.id;
+      const picker = panel.id === "quick-open" || panel.id === "command-palette";
+      const allowed = picker ? "#quick-open, #command-palette, #file-manager, #document-outline, .markdown-editor-modal" : "#" + panel.id;
       if (document.querySelector(`dialog[open]:not(${allowed})`)) return;
       event.preventDefault();
       event.stopPropagation();
@@ -436,7 +474,7 @@ function App() {
     }
     document.addEventListener("keydown", onPanelKey, true);
     return () => document.removeEventListener("keydown", onPanelKey, true);
-  }, [filesShortcut, library.ready, outlineShortcut, quickOpenShortcut, toggleFilesWithKeyboard, toggleOutline]);
+  }, [commandShortcut, filesShortcut, library.ready, outlineShortcut, quickOpenShortcut, toggleFilesWithKeyboard, toggleOutline, togglePicker]);
 
   useLayoutEffect(() => {
     document.documentElement.lang = locale;
@@ -485,6 +523,11 @@ function App() {
     else setOutlineVisible(false);
   }
 
+  function executeLibraryCommand(command: FileManagerCommand) {
+    showFiles();
+    fileManager.current?.executeCommand(command);
+  }
+
   async function openInEditor(id: string, keyboard: boolean) {
     const alreadyOpen = library.current?.id === id;
     await library.open(id);
@@ -521,6 +564,19 @@ function App() {
     }
   }
 
+  const commands: PaletteCommand[] | null = picker === "command-palette" ? [
+    { id: "quick-open", label: t("快速打开文件"), shortcut: quickOpenShortcut, keywords: "搜索文件 file search", run: () => togglePicker("quick-open") },
+    { id: "new-file", label: t("新建文件"), run: () => executeLibraryCommand("new") },
+    { id: "new-folder", label: t("新建文件夹"), run: () => executeLibraryCommand("new-folder") },
+    { id: "import", label: t("导入 Markdown 或 ZIP 文件"), run: () => executeLibraryCommand("import") },
+    { id: "file-manager", label: t("切换文件管理"), shortcut: filesShortcut, run: toggleFilesWithKeyboard },
+    { id: "outline", label: t("切换文档大纲"), shortcut: outlineShortcut, run: toggleOutline },
+    { id: "status", label: t(statusOpen ? "隐藏状态栏" : "显示状态栏"), run: () => setStatusOpen(value => !value) },
+    { id: "theme", label: t(theme === "dark" ? "切换浅色主题" : "切换深色主题"), run: toggleTheme },
+    { id: "custom-theme", label: t("自定义主题"), run: () => setThemeSettingsOpen(true) },
+    { id: "shortcuts", label: t("快捷键设置"), run: () => setShortcutsOpen(true) },
+  ].map(({ run, ...command }) => ({ ...command, run: close => { close(); run(); } })) : null;
+
   return <WebLocale.Provider value={locale}>
     <div className="workbench" data-files={!compact && filesOpen} data-outline={!compact && outlineOpen}>
       <Workspace library={library} theme={theme}
@@ -530,10 +586,11 @@ function App() {
         toggleTheme={toggleTheme}
         toggleFiles={toggleFiles} toggleOutline={toggleOutline}
         closeOutline={closeOutline} toggleStatus={() => setStatusOpen(value => !value)} onLocaleChange={changeLocale}
-        fileOpenRequest={fileOpenRequest} />
-      <FileManager library={library} open={filesOpen} compact={compact} onClose={closeFiles} onOpenFile={openInEditor}
+        fileOpenRequest={fileOpenRequest} commands={commands} commandShortcut={commandShortcut}
+        showCommands={() => togglePicker("command-palette")} closeCommands={() => closePicker("command-palette")} closeDrawer={() => setDrawer(null)} />
+      <FileManager ref={fileManager} library={library} open={filesOpen} compact={compact} onClose={closeFiles} onOpenFile={openInEditor}
         searchFocusRequest={searchFocusRequest} />
-      {quickOpen && <QuickOpen files={library.files} folders={library.folders} onClose={() => setQuickOpen(false)} onOpen={async id => {
+      {picker === "quick-open" && <QuickOpen files={library.files} folders={library.folders} onClose={() => closePicker("quick-open")} onOpen={async id => {
         await openInEditor(id, true);
         if (compact) setDrawer(null);
       }} />}
