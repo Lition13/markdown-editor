@@ -172,11 +172,13 @@ function format(message: string, values?: Record<string, string | number>) {
 const chinese: WebTranslator = (message, values) => format(message, values);
 const translated: WebTranslator = (message, values) => format(english[message], values);
 
-export function webTranslator(locale: MarkdownLocale = "zh-CN"): WebTranslator {
+export const defaultWebLocale: MarkdownLocale = "en";
+
+export function webTranslator(locale: MarkdownLocale = defaultWebLocale): WebTranslator {
   return locale === "en" ? translated : chinese;
 }
 
-export const WebLocale = createContext<MarkdownLocale>("zh-CN");
+export const WebLocale = createContext<MarkdownLocale>(defaultWebLocale);
 export const useWebLocale = () => useContext(WebLocale);
 export const useWebText = () => webTranslator(useWebLocale());
 

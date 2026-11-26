@@ -2,12 +2,13 @@ import {
   inspectMarkdown, MarkdownEditor, readMarkdownShortcutOverrides,
   type MarkdownEditorHandle, type MarkdownLocale, type MarkdownMode, type MarkdownOutlineItem, type MarkdownShortcutOverrides, type MarkdownTheme,
 } from "@lition13/markdown-editor";
-import { CodeXml, FileText, FolderOpen, Github, Keyboard, Languages, ListTree, Maximize2, Moon, Palette, PanelBottom, PencilLine, Sun, X } from "lucide-react";
+import { CodeXml, FileText, FolderOpen, Github, Keyboard, ListTree, Maximize2, Moon, Palette, PanelBottom, PencilLine, Sun, X } from "lucide-react";
 import { StrictMode, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "@lition13/markdown-editor/style.css";
 import FileManager from "./FileManager";
-import { formatDocumentCount, useWebLocale, useWebText, WebLocale, webTranslator } from "./locale";
+import LanguageMenu from "./LanguageMenu";
+import { defaultWebLocale, formatDocumentCount, useWebLocale, useWebText, WebLocale, webTranslator } from "./locale";
 import ShortcutSettings from "./ShortcutSettings";
 import SidePanel from "./SidePanel";
 import ThemeSettings from "./ThemeSettings";
@@ -77,13 +78,14 @@ function useCompactLayout() {
   return compact;
 }
 
-function Toolbar({ children }: { children: ReactNode }) {
+function Toolbar({ children, onLocaleChange }: { children: ReactNode; onLocaleChange: (locale: MarkdownLocale) => void }) {
   const t = useWebText();
   const [hovered, setHovered] = useState(false);
   const [held, setHeld] = useVisibility(toolbarKey, false);
   const [keyboard, setKeyboard] = useState(false);
+  const [languageOpen, setLanguageOpen] = useState(false);
   const handle = useRef<HTMLButtonElement>(null);
-  const visible = hovered || held || keyboard;
+  const visible = hovered || held || keyboard || languageOpen;
 
   function revealFromPointer(event: PointerEvent<HTMLElement>) {
     if (!hovered && event.pointerType !== "touch") setHovered(true);
@@ -113,6 +115,10 @@ function Toolbar({ children }: { children: ReactNode }) {
       </button>
       <div className="workbench-toolbar" id="workbench-toolbar" aria-label={t("工具栏")} hidden={!visible}>
         {children}
+        <LanguageMenu open={languageOpen} onOpenChange={setLanguageOpen} onChange={onLocaleChange} />
+        <a className="icon-control github" href={repository} target="_blank" rel="noreferrer" aria-label={t("GitHub 源码")} title={t("GitHub 源码")}>
+          <Github size={18} aria-hidden="true" />
+        </a>
       </div>
     </header>
   );
@@ -190,7 +196,7 @@ function Workspace({
 
   return (
     <>
-      <Toolbar>
+      <Toolbar onLocaleChange={onLocaleChange}>
         <button type="button" className="button panel-toggle" aria-label={t("文件管理")} title={t("文件管理")}
           aria-haspopup={compact ? "dialog" : undefined} aria-controls="file-manager" aria-expanded={filesOpen}
           disabled={!ready} onClick={toggleFiles}>
@@ -234,16 +240,6 @@ function Workspace({
           aria-controls="theme-settings" aria-haspopup="dialog" data-active={customThemeActive} onClick={showThemeSettings}>
           <Palette size={18} aria-hidden="true" />
         </button>
-        <label className="icon-control language-control" title={t("界面语言")}>
-          <Languages size={18} aria-hidden="true" />
-          <select aria-label={t("界面语言")} value={locale} onChange={event => onLocaleChange(event.currentTarget.value === "en" ? "en" : "zh-CN")}>
-            <option value="zh-CN" lang="zh-CN">简体中文</option>
-            <option value="en" lang="en">English</option>
-          </select>
-        </label>
-        <a className="icon-control github" href={repository} target="_blank" rel="noreferrer" aria-label={t("GitHub 源码")} title={t("GitHub 源码")}>
-          <Github size={18} />
-        </a>
       </Toolbar>
       <main className="workspace" aria-busy={!ready || undefined}>
         {current ? (
@@ -310,7 +306,7 @@ function App() {
     const saved = preference(localeKey);
     return saved === "en" || saved === "zh-CN" ? saved : null;
   });
-  const locale = preferredLocale ?? "zh-CN";
+  const locale = preferredLocale ?? defaultWebLocale;
   const library = useFileLibrary(preferredLocale);
   const t = webTranslator(locale);
   const [appearance, setAppearance] = useState(readTheme);

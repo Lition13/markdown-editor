@@ -11,6 +11,13 @@ export default defineConfig({
     ...devices["Desktop Chrome"],
     channel: process.env.CI ? undefined : "msedge",
     baseURL,
+    storageState: {
+      cookies: [],
+      origins: [{
+        origin: new URL(baseURL).origin,
+        localStorage: [{ name: "lition13-markdown-editor-locale", value: "zh-CN" }],
+      }],
+    },
     viewport: { width: 1440, height: 960 },
     colorScheme: "light",
     screenshot: "only-on-failure",

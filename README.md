@@ -11,7 +11,7 @@ Edit Markdown in your browser or embed the same editor and preview in a React pr
 A new file library opens **Getting started.md** by default. The example walks through editing commands, text formatting, lists, tables, code blocks, YAML front matter, math, Mermaid, image syntax, and footnotes. Open **入门示例.md** in the file manager for the Chinese version. Both are regular Markdown files you can edit and export. [English example](./apps/web/src/examples/en.md) · [Chinese example](./apps/web/src/examples/zh-CN.md)
 
 - Move the pointer to the top edge to reveal the toolbar. Click or tap the edge to pin it. The browser remembers the toolbar, file manager, outline, and status bar settings.
-- Use the language icon to switch the interface between English and Simplified Chinese. While an original example is open, switching languages opens the matching example.
+- The online interface starts in English and remembers your language choice. Use the language menu in the toolbar to switch to Simplified Chinese. While an original example is open, switching languages opens the matching example.
 - The file manager supports nested folders, search, batch import, and Markdown export. Drag files and folders to move them, or use Shift+Space to choose a destination from the keyboard. On touch screens, drag from the file or folder icon.
 - Files are saved in the current browser with IndexedDB. Export Markdown to keep a copy outside the browser. Older saved drafts are imported into the file library, and incoming files with the same name get a numbered suffix.
 - The status bar shows the word count from the document body and the line count from the Markdown source.

@@ -168,16 +168,56 @@ button, input, select { font: inherit; }
 .button.primary:hover { background: var(--accent-hover); }
 .button:disabled { opacity: .5; cursor: not-allowed; }
 .icon-control { width: 36px; padding: 0; color: var(--muted); }
-.language-control { position: relative; flex: none; }
-.language-control select {
+.language-control { position: relative; flex: none; -webkit-tap-highlight-color: transparent; }
+.language-trigger.icon-control {
+  width: auto;
+  gap: 6px;
+  padding-inline: 8px;
+  border-color: var(--edge);
+  color: var(--text);
+  font-size: .78rem;
+  font-weight: 650;
+}
+.language-trigger svg { flex: none; color: var(--muted); }
+.language-trigger[aria-expanded="true"] {
+  background: var(--soft-accent);
+  border-color: color-mix(in srgb, var(--edge), var(--accent) 32%);
+}
+.language-trigger[aria-expanded="true"] svg { color: var(--accent-text, var(--accent)); }
+.language-trigger[aria-expanded="true"] .language-chevron { transform: rotate(180deg); }
+.language-menu {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
+  z-index: 1;
+  inset-inline-end: 0;
+  inset-block-start: calc(100% + 7px);
+  inline-size: 176px;
+  max-inline-size: calc(100vw - 12px);
+  display: grid;
+  gap: 2px;
+  padding: 5px;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 5px 18px color-mix(in srgb, var(--text) 12%, transparent), var(--shadow);
+}
+.language-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-block-size: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-size: .875rem;
+  text-align: start;
   cursor: pointer;
 }
-.language-control:has(select:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
+.language-menu button:hover { background: var(--panel-soft); }
+.language-menu button[aria-checked="true"] { background: var(--soft-accent); color: var(--accent-text, var(--accent)); font-weight: 650; }
+.language-menu button:focus-visible { outline-offset: -2px; }
 .panel-toggle[aria-expanded="true"], .panel-toggle[aria-pressed="true"], .theme-control[data-active="true"] {
   background: var(--soft-accent);
   color: var(--accent-text, var(--accent));
@@ -579,6 +619,8 @@ dialog.side-panel::backdrop { background: #101a3278; }
   .workbench-toolbar .tool-label, .view-options button svg { display: none; }
   .workbench-toolbar .panel-toggle { min-width: 34px; padding-inline: 5px; }
   .workbench-toolbar .icon-control { width: 32px; }
+  .workbench-toolbar .language-trigger { padding-inline: 0; }
+  .language-label, .language-chevron { display: none; }
   .view-options button { padding-inline: 6px; }
   .document-name { font-size: .79rem; }
   .github { display: none; }
