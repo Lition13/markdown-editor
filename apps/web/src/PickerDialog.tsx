@@ -1,5 +1,6 @@
 import { Search, X } from "lucide-react";
 import { useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
+import { preserveTextSelection } from "./dialogFocus";
 import { useResultNavigation } from "./fileSearch";
 
 export interface PickerDialogHandle {
@@ -31,12 +32,7 @@ export default function PickerDialog<T extends { id: string }>({ ref, id, title,
   const [query, setQuery] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  const previousSelection = useRef<{
-    field: HTMLInputElement | HTMLTextAreaElement;
-    start: number;
-    end: number;
-    direction: HTMLInputElement["selectionDirection"];
-  }>(null);
+  const restoreSelection = useRef<ReturnType<typeof preserveTextSelection>>(undefined);
   const results = useMemo(() => find(query), [find, query]);
   const resultsId = id + "-results";
   const optionId = (itemId: string) => id + "-option-" + itemId;
@@ -44,10 +40,7 @@ export default function PickerDialog<T extends { id: string }>({ ref, id, title,
     const panel = dialog.current;
     if (!panel?.open) return;
     panel.close();
-    const previous = previousSelection.current;
-    if (previous && panel.ownerDocument.activeElement === previous.field) {
-      previous.field.setSelectionRange(previous.start, previous.end, previous.direction ?? undefined);
-    }
+    restoreSelection.current?.();
     onClose();
   }
   const pick = (item: T) => onPick(item, close);
@@ -57,11 +50,7 @@ export default function PickerDialog<T extends { id: string }>({ ref, id, title,
   useLayoutEffect(() => {
     const panel = dialog.current;
     if (panel && !panel.open) {
-      const field = panel.ownerDocument.activeElement;
-      if ((field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)
-        && field.selectionStart !== null && field.selectionEnd !== null) {
-        previousSelection.current = { field, start: field.selectionStart, end: field.selectionEnd, direction: field.selectionDirection };
-      }
+      restoreSelection.current = preserveTextSelection(panel.ownerDocument);
       panel.showModal();
     }
     input.current?.focus();

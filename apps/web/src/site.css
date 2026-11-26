@@ -357,7 +357,7 @@ aside.side-panel {
 }
 .file-manager { grid-column: 1; border-inline-end: 1px solid var(--edge); }
 .document-outline { grid-column: 3; border-inline-start: 1px solid var(--edge); }
-body:has(dialog:is(.side-panel, .quick-open)[open]) { overflow: hidden; }
+body:has(dialog:is(.side-panel, .quick-open, .file-command-dialog)[open]) { overflow: hidden; }
 dialog.side-panel {
   position: fixed;
   inset: 0 auto 0 0;
@@ -411,12 +411,8 @@ dialog.side-panel::backdrop { background: #101a3278; }
   font-size: .9rem;
 }
 .file-search input::placeholder { color: var(--muted); }
-.quick-open {
+:is(.quick-open, .file-command-dialog) {
   position: fixed;
-  inset: min(10dvh, 75px) 0 auto;
-  margin: 0 auto;
-  width: min(560px, calc(100% - 24px));
-  max-height: calc(100dvh - min(10dvh, 75px) - 12px);
   padding: 0;
   border: 1px solid var(--edge);
   border-radius: 12px;
@@ -424,7 +420,13 @@ dialog.side-panel::backdrop { background: #101a3278; }
   color: var(--text);
   box-shadow: var(--shadow);
 }
-.quick-open::backdrop { background: #101a3250; }
+.quick-open {
+  inset: min(10dvh, 75px) 0 auto;
+  margin: 0 auto;
+  width: min(560px, calc(100% - 24px));
+  max-height: calc(100dvh - min(10dvh, 75px) - 12px);
+}
+:is(.quick-open, .file-command-dialog)::backdrop { background: #101a3250; }
 .quick-open-body { display: flex; flex-direction: column; max-height: inherit; overflow: hidden; }
 .quick-open-query {
   display: flex;
@@ -517,6 +519,9 @@ dialog.side-panel::backdrop { background: #101a3278; }
 .button.danger { color: var(--error); }
 .button.danger:hover { border-color: var(--error); }
 .library-error { margin: 2px 0 0; color: var(--error); font-size: .875rem; }
+.file-command-dialog { inset: 0; width: min(400px, calc(100% - 24px)); max-height: calc(100dvh - 24px); margin: auto; }
+.file-command-dialog .file-action { padding: 16px; border: 0; background: var(--panel); }
+.file-command-dialog .library-error { margin: 0; padding: 0 16px 16px; }
 .library-location { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .library-root {
   display: flex;

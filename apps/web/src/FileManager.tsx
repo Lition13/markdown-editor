@@ -1,6 +1,7 @@
 import { ChevronRight, Download, FileText, Folder, FolderOpen, FolderPlus, FolderTree, PencilLine, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import SidePanel from "./SidePanel";
+import { preserveTextSelection } from "./dialogFocus";
 import { makeFolderZip, readImportFiles } from "./fileArchives";
 import { useResultNavigation } from "./fileSearch";
 import { FileLibraryError, folderPath, markdownName, type FileEntry, type FolderEntry, type MarkdownFile } from "./files";
@@ -8,17 +9,18 @@ import { useWebText, type WebMessage } from "./locale";
 import type { useFileLibrary } from "./useFileLibrary";
 import { useLibraryDrag } from "./useLibraryDrag";
 
-type FileAction =
+type FileAction = (
   | { type: "new" }
   | { type: "new-folder" }
   | { type: "rename"; file: FileEntry }
   | { type: "delete"; file: FileEntry }
   | { type: "rename-folder"; folder: FolderEntry }
-  | { type: "delete-folder"; folder: FolderEntry };
+  | { type: "delete-folder"; folder: FolderEntry }
+) & { inDialog?: true };
 
 const expandedFoldersKey = "lition13-markdown-editor-expanded-folders";
 
-export type FileManagerCommand = "new" | "new-folder" | "import";
+export type FileManagerCommand = "new" | "new-folder" | "import" | "export" | "delete" | "rename";
 export interface FileManagerHandle {
   executeCommand(command: FileManagerCommand): void;
 }
@@ -84,6 +86,9 @@ export default function FileManager({ ref, library, open, compact, onClose, onOp
   const nameInput = useRef<HTMLInputElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
   const previousControl = useRef<HTMLButtonElement | null>(null);
+  const actionDialog = useRef<HTMLDialogElement>(null);
+  const restoreSelection = useRef<ReturnType<typeof preserveTextSelection>>(undefined);
+  const inDialog = action?.inDialog === true;
   const { files, folders, current, ready, unsavedIds } = library;
   const foldersById = useMemo(() => new Map(folders.map(folder => [folder.id, folder])), [folders]);
   const childFolders = useMemo(() => groupByFolder(folders, folder => folder.parentId), [folders]);
@@ -150,7 +155,7 @@ export default function FileManager({ ref, library, open, compact, onClose, onOp
   }, [ready, openFolders, expanded]);
   useEffect(() => {
     if (open) return;
-    setAction(null);
+    setAction(previous => previous?.inDialog ? previous : null);
     setError("");
     setQuery("");
     selectResult(null);
@@ -162,11 +167,21 @@ export default function FileManager({ ref, library, open, compact, onClose, onOp
     return () => cancelAnimationFrame(frame);
   }, [open, searchFocusRequest]);
 
+  useLayoutEffect(() => {
+    const dialog = actionDialog.current;
+    if (!inDialog || !dialog || dialog.open) return;
+    restoreSelection.current = preserveTextSelection(dialog.ownerDocument);
+    dialog.showModal();
+  }, [inDialog]);
+
   useImperativeHandle(ref, () => ({
     executeCommand(command) {
       if (locked.current || !ready) return;
-      if (command === "import") chooseImport();
-      else begin({ type: command }, null);
+      if (command === "import") return chooseImport();
+      if (command === "new" || command === "new-folder") return begin({ type: command }, null);
+      if (!current) return;
+      if (command === "export") exportEntry(current, document.activeElement);
+      else begin({ type: command, file: current, inDialog: true }, null);
     },
   }));
 
@@ -198,8 +213,14 @@ export default function FileManager({ ref, library, open, compact, onClose, onOp
   }
 
   function dismissAction() {
+    const dialog = actionDialog.current;
+    if (dialog?.open) {
+      dialog.close();
+      restoreSelection.current?.();
+    }
     setAction(null);
     setError("");
+    if (dialog) return;
     requestAnimationFrame(() => {
       const button = previousControl.current;
       (button?.isConnected ? button : search.current)?.focus();
@@ -266,9 +287,8 @@ export default function FileManager({ ref, library, open, compact, onClose, onOp
     }, "open");
   }
 
-  function exportEntry(entry: FileEntry | FolderEntry, button: HTMLButtonElement) {
-    const panel = button.closest<HTMLElement>(".file-manager");
-    if (!panel) return;
+  function exportEntry(entry: FileEntry | FolderEntry, origin: Element | null) {
+    const panel = origin?.closest<HTMLElement>("dialog[open]") ?? document.body;
     void run(async () => {
       if ("parentId" in entry) {
         const { name, blob } = await makeFolderZip(await library.folderForExport(entry.id));
@@ -361,7 +381,56 @@ export default function FileManager({ ref, library, open, compact, onClose, onOp
     return <>{directories.map(folder => renderFolder(folder, depth))}{documents.map(renderFile)}</>;
   }
 
-  return (
+  const actionControls = deleting ? (
+    <div className="file-action">
+      {action.type === "delete" ? <p>{t("删除「{name}」？", { name: action.file.name })}</p>
+        : <p>{t("永久删除「{name}」及其中的所有文件和子文件夹？", { name: action.folder.name })}</p>}
+      <div className="file-action-buttons">
+        <button type="button" className="button" ref={cancelButton} disabled={busy} onClick={dismissAction}>{t("取消")}</button>
+        <button type="button" className="button danger" disabled={busy}
+          onClick={() => {
+            void run(async () => {
+              if (action.type === "delete") await library.remove(action.file.id);
+              else {
+                const { parentId, folderIds } = await library.deleteFolder(action.folder.id);
+                if (currentFolder && folderIds.has(currentFolder)) setFolderId(parentId);
+                setOpenFolders(previous => new Set([...(previous ?? expanded)].filter(id => !folderIds.has(id))));
+              }
+            });
+          }}>{t("确认删除")}</button>
+      </div>
+    </div>
+  ) : action && (
+    <form className="file-action" onSubmit={event => {
+      event.preventDefault();
+      void run(async () => {
+        if (action.type === "new") {
+          await library.add([{ name: markdownName(name), value: "" }], currentFolder);
+          selectFolder(currentFolder);
+          revealFolder(currentFolder);
+        } else if (action.type === "new-folder") {
+          const folder = await library.createFolder(name, currentFolder);
+          selectFolder(folder.id);
+          revealFolder(currentFolder, folder.id);
+        } else if (action.type === "rename-folder") await library.changeFolderName(action.folder.id, name);
+        else if (action.type === "rename") await library.rename(action.file.id, name);
+      }, action.type === "new" ? "open" : "action");
+    }}>
+      <label htmlFor="library-file-name">{
+        action.type === "new" ? t("新建文件名") : action.type === "new-folder" ? t("文件夹名称")
+          : action.type === "rename-folder" ? t("新文件夹名称") : t("新文件名")
+      }</label>
+      <input id="library-file-name" type="text" ref={nameInput} value={name} required
+        onChange={event => setName(event.currentTarget.value)} />
+      <div className="file-action-buttons">
+        <button type="button" className="button" disabled={busy} onClick={dismissAction}>{t("取消")}</button>
+        <button type="submit" className="button primary" disabled={busy}>{creating ? t("创建") : t("保存")}</button>
+      </div>
+    </form>
+  );
+  const actionError = error && <p className="library-error" role="alert">{t(error)}</p>;
+
+  return <>
     <SidePanel id="file-manager" title={t("文件管理")} className="file-manager" open={open} compact={compact} onDismiss={dismissPanel}>
       <div className="file-manager-heading">
         <h2 id="file-manager-title">{t("文件管理")}</h2>
@@ -418,54 +487,7 @@ export default function FileManager({ ref, library, open, compact, onClose, onOp
           </button>
           {placement && <span className="library-placement" title={placementTitle} aria-live="polite">{placementTitle}</span>}
         </div>
-        {deleting ? (
-          <div className="file-action">
-            {action.type === "delete" ? <p>{t("删除「{name}」？", { name: action.file.name })}</p>
-              : <p>{t("永久删除「{name}」及其中的所有文件和子文件夹？", { name: action.folder.name })}</p>}
-            <div className="file-action-buttons">
-              <button type="button" className="button" ref={cancelButton} disabled={busy} onClick={dismissAction}>{t("取消")}</button>
-              <button type="button" className="button danger" disabled={busy}
-                onClick={() => {
-                  void run(async () => {
-                    if (action.type === "delete") await library.remove(action.file.id);
-                    else {
-                      const { parentId, folderIds } = await library.deleteFolder(action.folder.id);
-                      if (currentFolder && folderIds.has(currentFolder)) setFolderId(parentId);
-                      setOpenFolders(previous => new Set([...(previous ?? expanded)].filter(id => !folderIds.has(id))));
-                    }
-                  });
-                }}>{t("确认删除")}</button>
-            </div>
-          </div>
-        ) : action && (
-          <form className="file-action" onSubmit={event => {
-            event.preventDefault();
-            void run(async () => {
-              if (action.type === "new") {
-                await library.add([{ name: markdownName(name), value: "" }], currentFolder);
-                selectFolder(currentFolder);
-                revealFolder(currentFolder);
-              } else if (action.type === "new-folder") {
-                const folder = await library.createFolder(name, currentFolder);
-                selectFolder(folder.id);
-                revealFolder(currentFolder, folder.id);
-              } else if (action.type === "rename-folder") await library.changeFolderName(action.folder.id, name);
-              else if (action.type === "rename") await library.rename(action.file.id, name);
-            }, action.type === "new" ? "open" : "action");
-          }}>
-            <label htmlFor="library-file-name">{
-              action.type === "new" ? t("新建文件名") : action.type === "new-folder" ? t("文件夹名称")
-                : action.type === "rename-folder" ? t("新文件夹名称") : t("新文件名")
-            }</label>
-            <input id="library-file-name" type="text" ref={nameInput} value={name} required
-              onChange={event => setName(event.currentTarget.value)} />
-            <div className="file-action-buttons">
-              <button type="button" className="button" disabled={busy} onClick={dismissAction}>{t("取消")}</button>
-              <button type="submit" className="button primary" disabled={busy}>{creating ? t("创建") : t("保存")}</button>
-            </div>
-          </form>
-        )}
-        {error && <p className="library-error" role="alert">{t(error)}</p>}
+        {!inDialog && <>{actionControls}{actionError}</>}
       </div>
       {(searchTerm ? matches.length > 0 : childFolders.has(null) || childFiles.has(null)) ? (
         <ul id="file-search-results" className="library-files"
@@ -501,5 +523,13 @@ export default function FileManager({ ref, library, open, compact, onClose, onOp
         </section>
       )}
     </SidePanel>
-  );
+    {inDialog && (
+      <dialog ref={actionDialog} className="file-command-dialog" aria-busy={busy || undefined}
+        aria-label={t(deleting ? "删除当前文件" : "重命名当前文件")}
+        onCancel={event => { event.preventDefault(); if (!locked.current) dismissAction(); }}>
+        {actionControls}
+        {actionError}
+      </dialog>
+    )}
+  </>;
 }

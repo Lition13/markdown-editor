@@ -9,7 +9,7 @@ export interface PaletteCommand {
   label: string;
   shortcut?: string | null;
   keywords?: string;
-  run: (close: () => void) => void;
+  run: () => void;
 }
 
 const normalize = (text: string) => text.normalize("NFKC").toLowerCase();
@@ -33,7 +33,7 @@ export default function CommandPalette({ ref, commands, onClose }: {
 
   return <PickerDialog ref={ref} id="command-palette" title={t("命令面板")} placeholder={t("搜索命令")} closeLabel={t("关闭命令面板")}
     resultsLabel={t("命令搜索结果")} emptyLabel={t("没有匹配的命令")} searchIcon={<Terminal size={18} aria-hidden="true" />}
-    find={find} onClose={onClose} onPick={(command, close) => command.run(close)}
+    find={find} onClose={onClose} onPick={(command, close) => { close(); command.run(); }}
     render={command => <>
       <span className="palette-command-name" title={command.label}>{command.label}</span>
       {command.shortcut && <kbd className="palette-command-key">{command.shortcut}</kbd>}

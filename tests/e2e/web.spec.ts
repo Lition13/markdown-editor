@@ -263,6 +263,10 @@ test("旧版草稿完整迁入文件库，删除最后一份后保持空库", as
   await expect(files.getByRole("button", { name: /^导出 / })).toHaveCount(0);
   await files.getByRole("button", { name: "关闭文件管理" }).click();
   await expect(page.getByRole("heading", { name: "暂无 Markdown 文件" })).toBeVisible();
+  await page.keyboard.press("Control+Shift+p");
+  const palette = page.getByRole("dialog", { name: "命令面板", exact: true });
+  await expect(palette.getByRole("option", { name: "新建文件", exact: true })).toBeVisible();
+  await expect(palette.getByRole("option", { name: /(?:导出|删除|重命名)当前文件/ })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("heading", { name: "暂无 Markdown 文件" })).toBeVisible();
 });

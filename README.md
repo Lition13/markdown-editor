@@ -35,7 +35,7 @@ A new file library opens **Getting started.md** by default. The example walks th
 
 Type `/` to find text formatting, lists, task checkboxes, links, images, tables, code blocks, formulas, Mermaid diagrams, and syntax help. Search for **YAML front matter** to insert a `name` and `description` template or jump to the existing header. You can edit the YAML at the top of documents such as `SKILL.md`.
 
-Open **Command Palette** with Ctrl+Shift+P or the terminal icon in the toolbar. Search by command name or shortcut, select with the arrow keys, then press Enter. Use it to open or import files, switch views and themes, insert a table, or undo an edit.
+Open **Command Palette** with Ctrl+Shift+P or the terminal icon in the toolbar. Search by command name or shortcut, select with the arrow keys, then press Enter. Use it to open or import files, switch layouts and themes, or export, rename, and delete the current file.
 
 In a code block, Enter keeps the current indentation and expands paired brackets onto separate lines. Use Tab or Shift+Tab to adjust indentation. The code toolbar lets you change the language, copy the code, or continue writing below the block. Add local images with the image picker, paste, or drag and drop. KaTeX and Mermaid render in the workspace, including SVG rendering for Mermaid Event Modeling.
 

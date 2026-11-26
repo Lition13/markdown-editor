@@ -1,9 +1,9 @@
 import {
-  getMarkdownShortcutBindings, getMarkdownShortcutCommands, inspectMarkdown, MarkdownEditor, markdownShortcutFromEvent,
-  type MarkdownEditorCommand, type MarkdownEditorHandle, type MarkdownLocale, type MarkdownMode, type MarkdownOutlineItem, type MarkdownShortcutOverrides, type MarkdownTheme,
+  inspectMarkdown, MarkdownEditor, markdownShortcutFromEvent,
+  type MarkdownEditorHandle, type MarkdownLocale, type MarkdownMode, type MarkdownOutlineItem, type MarkdownShortcutOverrides, type MarkdownTheme,
 } from "@lition13/markdown-editor";
 import { CodeXml, FileText, FolderOpen, Github, Keyboard, ListTree, Moon, Palette, PanelBottom, PencilLine, Sun, Terminal, X } from "lucide-react";
-import { StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode, type Ref } from "react";
+import { StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "@lition13/markdown-editor/style.css";
 import CommandPalette, { type PaletteCommand } from "./CommandPalette";
@@ -33,7 +33,6 @@ const compactQuery = "(max-width: 840px)";
 
 type FileOpenRequest = { id: string; keyboard: boolean; alreadyOpen: boolean };
 type PickerId = "quick-open" | "command-palette";
-const documentCommands: readonly MarkdownEditorCommand[] = ["source", "expand", "undo", "redo", "table", "help"];
 
 function preference(key: string) {
   try {
@@ -130,7 +129,7 @@ function Toolbar({ children, onLocaleChange }: { children: ReactNode; onLocaleCh
 function Workspace({
   library, theme, customThemeActive, toggleTheme, showThemeSettings, compact, filesOpen, outlineOpen, statusOpen, showFiles,
   toggleFiles, toggleOutline, closeOutline, toggleStatus, shortcuts, filesShortcut, outlineShortcut, showShortcuts, onLocaleChange,
-  fileOpenRequest, commands, commandShortcut, showCommands, closeCommands, closeDrawer, pickerRef,
+  fileOpenRequest, commandShortcut, showCommands,
 }: {
   library: ReturnType<typeof useFileLibrary>;
   theme: MarkdownTheme;
@@ -152,12 +151,8 @@ function Workspace({
   showShortcuts: () => void;
   onLocaleChange: (locale: MarkdownLocale) => void;
   fileOpenRequest: FileOpenRequest | null;
-  commands: readonly PaletteCommand[] | null;
   commandShortcut: string | null;
   showCommands: () => void;
-  closeCommands: () => void;
-  closeDrawer: () => void;
-  pickerRef: Ref<PickerDialogHandle>;
 }) {
   const locale = useWebLocale();
   const t = webTranslator(locale);
@@ -240,22 +235,6 @@ function Workspace({
   function setMode(mode: MarkdownMode) {
     setView(previous => ({ ...previous, mode }));
   }
-
-  function executeEditorCommand(command: MarkdownEditorCommand, close: () => void) {
-    const selection = editor.current?.getSelection();
-    close();
-    const run = () => editor.current?.executeCommand?.(command, selection);
-    if (compact && (filesOpen || outlineOpen)) {
-      closeDrawer();
-      requestAnimationFrame(run);
-    } else run();
-  }
-
-  const editorCommands = commands && current ? getMarkdownShortcutCommands(locale).flatMap(item => {
-    const command = documentCommands.find(id => id === item.id);
-    return command ? [{ id: command, label: item.label, shortcut: getMarkdownShortcutBindings(command, shortcuts[command])[0],
-      run: (close: () => void) => executeEditorCommand(command, close) }] : [];
-  }) : [];
 
   function jump(heading: MarkdownOutlineItem) {
     setView(previous => ({ ...previous, headingOffset: heading.offset }));
@@ -385,7 +364,6 @@ function Workspace({
           )}
       </footer>
       {!statusOpen && <span role="status" className="visually-hidden">{t(status)}</span>}
-      {commands && <CommandPalette ref={pickerRef} commands={[...commands, ...editorCommands]} onClose={closeCommands} />}
     </>
   );
 }
@@ -528,7 +506,7 @@ function App() {
   }
 
   function executeLibraryCommand(command: FileManagerCommand) {
-    showFiles();
+    if (command === "new" || command === "new-folder" || command === "import") showFiles();
     fileManager.current?.executeCommand(command);
   }
 
@@ -573,13 +551,18 @@ function App() {
     { id: "new-file", label: t("新建文件"), run: () => executeLibraryCommand("new") },
     { id: "new-folder", label: t("新建文件夹"), run: () => executeLibraryCommand("new-folder") },
     { id: "import", label: t("导入 Markdown 或 ZIP 文件"), run: () => executeLibraryCommand("import") },
+    ...(library.current ? [
+      { id: "export", label: t("导出当前文件"), run: () => executeLibraryCommand("export") },
+      { id: "delete", label: t("删除当前文件"), run: () => executeLibraryCommand("delete") },
+      { id: "rename", label: t("重命名当前文件"), run: () => executeLibraryCommand("rename") },
+    ] : []),
     { id: "file-manager", label: t("切换文件管理"), shortcut: filesShortcut, run: toggleFilesWithKeyboard },
     { id: "outline", label: t("切换文档大纲"), shortcut: outlineShortcut, run: toggleOutline },
     { id: "status", label: t(statusOpen ? "隐藏状态栏" : "显示状态栏"), run: () => setStatusOpen(value => !value) },
     { id: "theme", label: t(theme === "dark" ? "切换浅色主题" : "切换深色主题"), run: toggleTheme },
     { id: "custom-theme", label: t("自定义主题"), run: () => setThemeSettingsOpen(true) },
     { id: "shortcuts", label: t("快捷键设置"), run: () => setShortcutsOpen(true) },
-  ].map(({ run, ...command }) => ({ ...command, run: close => { close(); run(); } })) : null;
+  ] : null;
 
   return <WebLocale.Provider value={locale}>
     <div className="workbench" data-files={!compact && filesOpen} data-outline={!compact && outlineOpen}>
@@ -590,10 +573,10 @@ function App() {
         toggleTheme={toggleTheme}
         toggleFiles={toggleFiles} toggleOutline={toggleOutline}
         closeOutline={closeOutline} toggleStatus={() => setStatusOpen(value => !value)} onLocaleChange={changeLocale}
-        fileOpenRequest={fileOpenRequest} commands={commands} commandShortcut={commandShortcut} pickerRef={pickerRef}
-        showCommands={() => togglePicker("command-palette")} closeCommands={() => closePicker("command-palette")} closeDrawer={() => setDrawer(null)} />
+        fileOpenRequest={fileOpenRequest} commandShortcut={commandShortcut} showCommands={() => togglePicker("command-palette")} />
       <FileManager ref={fileManager} library={library} open={filesOpen} compact={compact} onClose={closeFiles} onOpenFile={openInEditor}
         searchFocusRequest={searchFocusRequest} />
+      {commands && <CommandPalette ref={pickerRef} commands={commands} onClose={() => closePicker("command-palette")} />}
       {picker === "quick-open" && <QuickOpen ref={pickerRef} files={library.files} folders={library.folders} onClose={() => closePicker("quick-open")} onOpen={async id => {
         await openInEditor(id, true);
         if (compact) setDrawer(null);

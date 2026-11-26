@@ -9,61 +9,101 @@ const zipFile = (entries: Record<string, string>) => ({
   buffer: Buffer.from(zipSync(Object.fromEntries(Object.entries(entries).map(([path, text]) => [path, strToU8(text)])))),
 });
 
-test("命令面板可按名称和快捷键搜索，执行编辑与撤销", async ({ page }) => {
+test("命令面板精简编辑命令，在全屏里导出、重命名和删除当前文件", async ({ page }) => {
   await page.goto("./");
   const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
-  await editor.focus();
+  const files = await fileManager(page);
+  const value = "# 命令验收\n\n原始正文";
+  await files.getByLabel("选择 Markdown 或 ZIP 文件").setInputFiles([
+    { name: "原稿.markdown", mimeType: "text/markdown", buffer: Buffer.from(value) },
+    { name: "保留.md", mimeType: "text/markdown", buffer: Buffer.from("保留正文") },
+  ]);
+  await expect(page.getByRole("heading", { name: "命令验收", exact: true })).toBeVisible();
+  await page.keyboard.press("Control+Alt+f");
+  await expect(files).toBeHidden();
+  await editor.press("Control+/");
+  const source = page.locator("textarea.notes-editor-textarea");
+  await expect(source).toHaveValue(value);
+  await source.press("Control+End");
   const palette = page.getByRole("dialog", { name: "命令面板", exact: true });
   const search = palette.getByRole("combobox", { name: "搜索命令", exact: true });
   const selected = palette.getByRole("option", { selected: true });
+  const openCommand = async (query: string, label: string) => {
+    await page.keyboard.press("Control+Shift+p");
+    await expect(search).toBeFocused();
+    await search.fill(query);
+    await expect(selected).toContainText(label);
+  };
   await page.keyboard.press("Control+Shift+p");
   await expect(search).toBeFocused();
-  await search.fill("no-such-command");
+  await expect(palette.getByRole("option", { name: /插入表格|切换编辑与源码|切换全屏编辑|撤销|重做|Markdown 语法帮助/ })).toHaveCount(0);
+  await search.fill("插入表格");
   await expect(palette.getByRole("status")).toHaveText("没有匹配的命令");
-  await search.fill("切换编辑与源码");
-  await expect(selected).toContainText("切换编辑与源码");
-  await selected.click();
-  await expect(palette).toBeHidden();
-  const source = page.locator("textarea.notes-editor-textarea");
-  await expect(source).toBeFocused();
-  await source.fill("正文");
-  await source.press("End");
-
-  await page.keyboard.press("Control+Shift+p");
-  await expect(search).toBeFocused();
+  await search.fill("> Ctrl+Alt+F");
+  await expect(selected).toContainText("切换文件管理");
   await page.keyboard.press("Escape");
   await expect(palette).toBeHidden();
   await expect(source).toBeFocused();
-  await expect.poll(() => source.evaluate((field: HTMLTextAreaElement) => field.selectionEnd)).toBe(2);
+  await expect.poll(() => source.evaluate((field: HTMLTextAreaElement) => field.selectionEnd)).toBe(value.length);
 
-  await page.keyboard.press("Control+Shift+p");
-  await search.fill("> Ctrl+Alt+T");
-  await expect(selected).toContainText("插入表格");
-  await page.keyboard.press("Enter");
-  const table = page.getByRole("dialog", { name: "插入表格", exact: true });
-  const rows = table.getByRole("spinbutton", { name: "行数（含表头）" });
-  await expect(rows).toBeFocused();
-  await rows.fill("2");
-  await rows.press("Enter");
-  await expect(source).toHaveValue(/正文\n\n\|.*\|/);
-
-  await page.keyboard.press("Control+Shift+p");
-  await search.fill("撤销");
-  await expect(selected).toContainText("撤销");
-  await page.keyboard.press("Enter");
-  await expect(source).toHaveValue("正文");
+  await source.press("/");
+  const slash = page.getByRole("menu", { name: "描述工具", exact: true });
+  await expect(slash.getByRole("menuitem", { name: /描述表格/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await source.press("Alt+Enter");
+  const fullscreen = page.locator("dialog.markdown-editor-modal");
+  await expect(fullscreen).toBeVisible();
   await expect(source).toBeFocused();
 
-  await source.press("Control+End");
-  const fullscreen = page.locator("dialog.markdown-editor-modal");
-  for (const expanded of [true, false]) {
-    await page.keyboard.press("Control+Shift+p");
-    await search.fill("切换全屏编辑");
-    await page.keyboard.press("Enter");
-    await expect(fullscreen).toHaveCount(expanded ? 1 : 0);
-    await expect(source).toBeFocused();
-    await expect.poll(() => source.evaluate((field: HTMLTextAreaElement) => field.selectionEnd)).toBe(2);
-  }
+  await openCommand("导出", "导出当前文件");
+  const [download] = await Promise.all([page.waitForEvent("download"), search.press("Enter")]);
+  expect(download.suggestedFilename()).toBe("原稿.md");
+  expect(await readFile(await download.path(), "utf8")).toBe(value);
+  await expect(files).toBeHidden();
+  await expect(fullscreen).toBeVisible();
+
+  await openCommand("重命名", "重命名当前文件");
+  await selected.click();
+  const rename = page.getByRole("dialog", { name: "重命名当前文件", exact: true });
+  const name = rename.getByRole("textbox", { name: "新文件名", exact: true });
+  await expect(name).toBeFocused();
+  await expect(name).toHaveValue("原稿.markdown");
+  await name.fill("保留.md");
+  await name.press("Enter");
+  await expect(rename.getByRole("alert")).toHaveText("已有同名文件，请换一个名称。");
+  await name.fill("改好");
+  await name.press("Enter");
+  await expect(rename).toBeHidden();
+  await expect(fullscreen).toBeVisible();
+  await expect(source).toBeFocused();
+  await expect(source).toHaveValue(value);
+  await expect.poll(() => source.evaluate((field: HTMLTextAreaElement) => field.selectionEnd)).toBe(value.length);
+
+  const remove = page.getByRole("dialog", { name: "删除当前文件", exact: true });
+  await openCommand("删除", "删除当前文件");
+  await page.keyboard.press("Enter");
+  await expect(remove.getByText("删除「改好.md」？", { exact: true })).toBeVisible();
+  await expect(remove.getByRole("button", { name: "取消", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(remove).toBeHidden();
+  await expect(source).toBeFocused();
+  await expect(source).toHaveValue(value);
+
+  await openCommand("删除", "删除当前文件");
+  await page.keyboard.press("Enter");
+  await remove.getByRole("button", { name: "确认删除", exact: true }).click();
+  await expect(remove).toBeHidden();
+  await expect(fullscreen).toHaveCount(0);
+  await page.keyboard.press("Control+p");
+  const quickOpen = page.getByRole("dialog", { name: "快速打开文件", exact: true });
+  const fileSearch = quickOpen.getByRole("combobox");
+  await fileSearch.fill("改好");
+  await expect(quickOpen.getByRole("status")).toHaveText("没有匹配的文件");
+  await fileSearch.fill("保留");
+  await fileSearch.press("Enter");
+  await expect(editor).toHaveText("保留正文");
+  await page.reload();
+  await expect(editor).toHaveText("保留正文");
 });
 
 test("窄窗命令面板支持方向键、新建和导入，可切换到快速打开", async ({ page }) => {
