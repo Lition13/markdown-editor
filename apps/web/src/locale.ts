@@ -14,7 +14,6 @@ const english = {
   "文档视图": "Document view",
   "编辑": "Edit",
   "源码": "Source",
-  "全屏编辑": "Fullscreen editor",
   "文档大纲": "Document outline",
   "状态栏": "Status bar",
   "隐藏状态栏": "Hide status bar",

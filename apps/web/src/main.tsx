@@ -2,7 +2,7 @@ import {
   inspectMarkdown, MarkdownEditor, readMarkdownShortcutOverrides,
   type MarkdownEditorHandle, type MarkdownLocale, type MarkdownMode, type MarkdownOutlineItem, type MarkdownShortcutOverrides, type MarkdownTheme,
 } from "@lition13/markdown-editor";
-import { CodeXml, FileText, FolderOpen, Github, Keyboard, ListTree, Maximize2, Moon, Palette, PanelBottom, PencilLine, Sun, X } from "lucide-react";
+import { CodeXml, FileText, FolderOpen, Github, Keyboard, ListTree, Moon, Palette, PanelBottom, PencilLine, Sun, X } from "lucide-react";
 import { StrictMode, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "@lition13/markdown-editor/style.css";
@@ -199,20 +199,14 @@ function Workspace({
         </button>
         <span className="document-name" title={current?.name}>{current?.name}</span>
         {current && (
-          <>
-            <div className="view-options" role="group" aria-label={t("文档视图")}>
-              <button type="button" aria-label={t("编辑")} title={t("编辑")} aria-pressed={mode === "live"} onClick={() => setMode("live")}>
-                <PencilLine size={16} aria-hidden="true" />
-              </button>
-              <button type="button" aria-label={t("源码")} title={t("源码")} aria-pressed={mode === "source"} onClick={() => setMode("source")}>
-                <CodeXml size={16} aria-hidden="true" />
-              </button>
-            </div>
-            <button type="button" className="icon-control" aria-label={t("全屏编辑")} title={t("全屏编辑")} aria-haspopup="dialog"
-              onClick={() => editor.current?.openFullscreen()}>
-              <Maximize2 size={17} aria-hidden="true" />
+          <div className="view-options" role="group" aria-label={t("文档视图")}>
+            <button type="button" aria-label={t("编辑")} title={t("编辑")} aria-pressed={mode === "live"} onClick={() => setMode("live")}>
+              <PencilLine size={16} aria-hidden="true" />
             </button>
-          </>
+            <button type="button" aria-label={t("源码")} title={t("源码")} aria-pressed={mode === "source"} onClick={() => setMode("source")}>
+              <CodeXml size={16} aria-hidden="true" />
+            </button>
+          </div>
         )}
         <button type="button" className="button icon-control panel-toggle" aria-label={t("文档大纲")} title={t("文档大纲")}
           aria-haspopup={compact ? "dialog" : undefined} aria-controls="document-outline" aria-expanded={outlineOpen}

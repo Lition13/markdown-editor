@@ -307,6 +307,7 @@ test("工作台默认隐藏面板，图标按钮可切换视图和状态栏", as
   )).toBe(true);
   await handle.hover();
   await expect(toolbar).toBeVisible();
+  await expect(toolbar.getByRole("button", { name: "全屏编辑", exact: true })).toHaveCount(0);
   const edit = toolbar.getByRole("button", { name: "编辑", exact: true });
   const source = toolbar.getByRole("button", { name: "源码", exact: true });
   const outline = toolbar.getByRole("button", { name: "文档大纲", exact: true });
@@ -385,8 +386,7 @@ test("自定义主题预览后应用到工作区、代码和全屏，刷新后�
   await expect(code).toHaveCSS("background-color", "rgb(23, 41, 35)");
   await code.click();
   await expect(editor.locator(".cm-md-code-line")).toHaveCSS("background-color", "rgb(23, 41, 35)");
-  await revealToolbar(page);
-  await toolbar.getByRole("button", { name: "全屏编辑", exact: true }).click();
+  await editor.press("Alt+Enter");
   const fullscreen = page.getByRole("dialog", { name: "编辑 Markdown", exact: true });
   await expect(fullscreen).toHaveCSS("background-color", "rgb(244, 239, 230)");
   await expect(fullscreen.locator(".cm-md-code-line")).toHaveCSS("background-color", "rgb(23, 41, 35)");
@@ -748,8 +748,7 @@ test("英文覆盖快捷键、主题、斜杠菜单和全屏内的编辑工具",
   const chart = page.getByRole("img", { name: "Mermaid diagram", exact: true });
   await expect(chart).toContainText("Event model");
   await expect(chart).toContainText("Shop.Saved");
-  await top.hover();
-  await toolbar.getByRole("button", { name: "Fullscreen editor", exact: true }).click();
+  await page.getByRole("main").getByRole("textbox", { name: "Markdown document", exact: true }).press("Alt+Enter");
   const fullscreen = page.getByRole("dialog", { name: "Edit Markdown", exact: true });
   const editor = fullscreen.getByRole("textbox", { name: "Markdown document", exact: true });
   await fullscreen.getByText("plain example", { exact: true }).click();

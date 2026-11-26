@@ -1547,7 +1547,7 @@ test("全屏和语法帮助快捷键保留选区，小窗口自动保存", async
   await expect.poll(() => saved(page)).toBe("## 实时描述\n\n正在此文");
 });
 
-test("从顶栏进入全屏，长文档切换视图并返回时延续选区、滚动与撤销", async ({ page }) => {
+test("用 Alt+Enter 进入全屏，长文档切换视图并返回时延续选区、滚动与撤销", async ({ page }) => {
   await ready(page);
   const editor = notes(page);
   const token = "CURRENT-SELECTION";
@@ -1563,8 +1563,7 @@ test("从顶栏进入全屏，长文档切换视图并返回时延续选区、�
   });
   const before = await page.evaluate(() => scrollY);
   expect(before).toBeGreaterThan(1000);
-  const toolbar = await revealToolbar(page);
-  await toolbar.getByRole("button", { name: "全屏编辑", exact: true }).click();
+  await editor.press("Alt+Enter");
 
   const dialog = page.getByRole("dialog", { name: "编辑 Markdown", exact: true });
   const modes = dialog.getByRole("group", { name: "全屏编辑视图" });
