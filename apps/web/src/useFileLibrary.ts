@@ -1,10 +1,11 @@
 import type { MarkdownLocale } from "@lition13/markdown-editor";
 import { useEffect, useRef, useState } from "react";
 import {
-  addFiles, addFolder, exampleFiles, FileLibraryError, fileEntry, folderRemoval, isOriginalExample,
+  addFiles, addFolder, exampleFiles, FileLibraryError, fileEntry, folderRemoval, isOriginalExample, makeLibraryBackup,
   movedFile, movedFolder, moveFile, moveFolder, newFiles, newFolder,
-  openFile, readLibrary, removeFile, removeFolder, renamedFile, renamedFolder, renameFile, renameFolder,
-  saveContent, sortByName, syncExampleLanguage, type FileEntry, type FileInput, type FolderEntry, type MarkdownFile,
+  openFile, planLibraryRestore, readBackupLibrary, readLibrary, removeFile, removeFolder, renamedFile, renamedFolder,
+  renameFile, renameFolder, restoreLibraryBackup, saveContent, sortByName, syncExampleLanguage,
+  type FileEntry, type FileInput, type FolderEntry, type LibraryBackup, type MarkdownFile,
 } from "./files";
 import type { WebMessage } from "./locale";
 
@@ -161,6 +162,36 @@ export function useFileLibrary(preferredLocale: MarkdownLocale | null) {
     show(created[0]);
   }
 
+  async function backUp() {
+    const content = memory.current;
+    if (content) return makeLibraryBackup(folders, files.map(file => ({ ...file, value: content.get(file.id) ?? "" })));
+    const drafts = [...pending.current].map(([id, edit]) => ({ id, value: edit.value }));
+    const snapshot = await readBackupLibrary();
+    const documents = new Map(snapshot.files.map(file => [file.id, file]));
+    const folderIds = new Set(snapshot.folders.map(folder => folder.id));
+    for (const { id, value } of drafts) {
+      const file = documents.get(id) ?? files.find(entry => entry.id === id);
+      if (!file) continue;
+      documents.set(id, { ...file, value, folderId: file.folderId && folderIds.has(file.folderId) ? file.folderId : null });
+    }
+    return makeLibraryBackup(snapshot.folders, [...documents.values()]);
+  }
+
+  async function restore(backup: LibraryBackup) {
+    if (!memory.current) {
+      const result = await restoreLibraryBackup(backup, active.current === null);
+      setFiles(result.files);
+      setFolders(result.folders);
+      if (!active.current && result.current) show(result.current);
+      return;
+    }
+    const added = planLibraryRestore(backup, files, folders);
+    for (const file of added.files) memory.current.set(file.id, file.value);
+    setFiles(sortByName([...files, ...added.files.map(fileEntry)]));
+    setFolders(sortByName([...folders, ...added.folders]));
+    if (!active.current && added.files.length) show(added.files[0]);
+  }
+
   function updateEntries(entries: FileEntry[]) {
     const updates = new Map(entries.map(entry => [entry.id, entry]));
     setFiles(previous => sortByName(previous.map(file => updates.get(file.id) ?? file)));
@@ -235,6 +266,6 @@ export function useFileLibrary(preferredLocale: MarkdownLocale | null) {
 
   return {
     files, folders, current, ready, status, unsavedIds,
-    change, open, add, rename, move, remove, createFolder, changeFolderName, relocateFolder, deleteFolder,
+    change, open, add, rename, move, remove, createFolder, changeFolderName, relocateFolder, deleteFolder, backUp, restore,
   };
 }

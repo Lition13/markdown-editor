@@ -286,6 +286,11 @@ test("两个标签页编辑同一文件时保留已保存内容，并可导出�
   const download = second.waitForEvent("download");
   await files.getByRole("button", { name: "导出", exact: true }).click();
   expect(await readFile(await (await download).path(), "utf8")).toBe("另一页正在编辑的版本");
+  const [backup] = await Promise.all([
+    second.waitForEvent("download"), files.getByRole("button", { name: "备份文件库", exact: true }).click(),
+  ]);
+  const snapshot = JSON.parse(await readFile(await backup.path(), "utf8"));
+  expect(snapshot.files).toEqual(expect.arrayContaining([expect.objectContaining({ value: "另一页正在编辑的版本" })]));
   await second.reload();
   await expect(second.getByRole("textbox", editor)).toHaveText("先保存的版本");
 });
@@ -641,6 +646,8 @@ test("完整的入门示例按语言切换并保留编辑和删除操作", async
   expect(markdown).toMatch(/^# Getting started\n/);
   expect(markdown).toMatch(/```yaml\n---\nname: markdown-quickstart\ndescription: .+\n---\n```/);
   expect(markdown).toContain("| Insert a table | Ctrl+Alt+T |");
+  expect(markdown).toContain("| Show or hide the file manager | Ctrl+Alt+F |");
+  expect(markdown).toContain("| Show or hide the document outline | Ctrl+Alt+O |");
   expect(markdown).toContain("## Lists and checkboxes");
   expect(markdown).toContain("| :--- | :---: | ---: |");
   expect(markdown).toContain("```javascript");

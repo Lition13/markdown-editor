@@ -420,6 +420,9 @@ dialog.side-panel::backdrop { background: #101a3278; }
   font-size: .875rem;
 }
 .file-action :is(p, label) { margin: 0; overflow-wrap: anywhere; }
+.backup-preview h3 { margin: 0; font-size: .875rem; overflow-wrap: anywhere; }
+.backup-preview summary { cursor: pointer; }
+.backup-preview ul { max-block-size: 9rem; margin: 6px 0 0; padding-inline-start: 18px; overflow: auto; overflow-wrap: anywhere; }
 .file-action :is(input, select) {
   width: 100%;
   min-width: 0;
@@ -435,6 +438,7 @@ dialog.side-panel::backdrop { background: #101a3278; }
 .button.danger { color: var(--error); }
 .button.danger:hover { border-color: var(--error); }
 .library-error { margin: 2px 0 0; color: var(--error); font-size: .875rem; }
+.library-notice { margin: 2px 0 0; color: var(--accent-text, var(--accent)); font-size: .875rem; }
 .library-location { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .library-root {
   display: flex;
@@ -489,6 +493,7 @@ dialog.side-panel::backdrop { background: #101a3278; }
   background: var(--soft-accent);
   box-shadow: inset 2px 0 var(--accent);
 }
+.file-open[data-search-active="true"] { outline: 2px solid var(--accent); outline-offset: -2px; }
 .file-open {
   display: flex;
   flex: 1;

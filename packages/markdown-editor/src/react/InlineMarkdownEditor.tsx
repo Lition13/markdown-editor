@@ -25,6 +25,7 @@ export interface InlineMarkdownHandle {
   selection(): TextSelection;
   focus(range: TextSelection, align?: "start"): void;
   point(position: number): MenuPoint | undefined;
+  offsetAtViewport(y: number): number | null;
   setHeading(depth: number | "raise" | "lower"): boolean;
   insertTable(source: string, range: TextSelection): void;
 }
@@ -228,6 +229,10 @@ export default function InlineMarkdownEditor(props: Props) {
   useImperativeHandle(props.ref, () => ({
     selection: () => editor.current ? sourceSelection(editor.current.state) : latest.current.cursor.current,
     point: position => editor.current ? caretPoint(editor.current, position) : undefined,
+    offsetAtViewport(y) {
+      const view = editor.current;
+      return view ? view.lineBlockAtHeight(Math.max(0, y - view.documentTop)).from : null;
+    },
     setHeading: depth => editor.current ? applyHeadingShortcut(editor.current, depth) : false,
     insertTable(source, range) {
       const view = editor.current;

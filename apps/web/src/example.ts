@@ -67,8 +67,22 @@ const previousEnglishExample = {
 export const example = { name: previousChineseExample.name, value: chinese.replace(/\r\n?/g, "\n") };
 export const englishExample = { name: previousEnglishExample.name, value: english.replace(/\r\n?/g, "\n") };
 
+function previousToolbarGuide(value: string, guidance: string, previous: string) {
+  return value.replace(/^\|.*\| Ctrl\+Alt\+[FO] \|\n/gm, "").replace(guidance, previous);
+}
+
 export const previousExampleValues = {
-  "zh-CN": new Set(["Ctrl+Alt+T", "Ctrl+T", "Ctrl+Shift+Enter"].map(key =>
-    previousChineseExample.value.replace("| 插入表格 | Ctrl+Alt+T |", `| 插入表格 | ${key} |`))),
-  en: new Set([previousEnglishExample.value]),
+  "zh-CN": new Set([
+    ...["Ctrl+Alt+T", "Ctrl+T", "Ctrl+Shift+Enter"].map(key =>
+      previousChineseExample.value.replace("| 插入表格 | Ctrl+Alt+T |", `| 插入表格 | ${key} |`)),
+    previousToolbarGuide(example.value,
+      "把鼠标移到页面上沿可显示工具栏，触屏可轻点上沿。点击源码图标可查看这份文件的写法，在编辑区按 Alt+Enter 可进入全屏。",
+      "把鼠标移到屏幕上沿可展开工具栏。点击「源码」可以查看这份文件的写法，点击全屏按钮可以专注编辑正文。"),
+  ]),
+  en: new Set([
+    previousEnglishExample.value,
+    previousToolbarGuide(englishExample.value,
+      "Move the pointer to the top edge or tap it on a touch screen to show the toolbar. Use the source icon to see how this file is written, or press Alt+Enter in the editor to write in fullscreen.",
+      "Move the pointer to the top edge to show the toolbar. Switch to the source view to see how this file is written, or use the fullscreen button to focus on the document."),
+  ]),
 };

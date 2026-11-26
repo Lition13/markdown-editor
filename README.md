@@ -13,6 +13,8 @@ A new file library opens **Getting started.md** by default. The example walks th
 - The toolbar, file manager, outline, and status bar start hidden. Move the pointer to the top edge to reveal the toolbar, or click or tap the edge to pin it. Hover over an icon for its label. The browser remembers which panels are open and whether the toolbar is pinned.
 - The online interface starts in English and remembers your language choice. Use the language menu in the toolbar to switch to Simplified Chinese. While an original example is open, switching languages opens the matching example.
 - The file manager supports nested folders, search, batch import, and Markdown export. Drag files and folders to move them, or use Shift+Space to choose a destination from the keyboard. On touch screens, drag from the file or folder icon.
+- In the file search box, use the arrow keys to choose a result and Enter to open it and focus the editor. Returning to a file in the same tab restores the last editing position. The outline highlights the current section as you scroll in either edit mode.
+- Use **Back up library** to download a JSON file containing the Markdown text and folder structure. **Restore backup** previews the contents before merging them into the library. Matching folders merge, and files with the same name get numbered suffixes.
 - Files are saved in the current browser with IndexedDB. Export Markdown to keep a copy outside the browser. Older saved drafts are imported into the file library, and incoming files with the same name get a numbered suffix.
 - The status bar shows the word count from the document body and the line count from the Markdown source.
 

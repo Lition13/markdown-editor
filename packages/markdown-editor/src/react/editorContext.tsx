@@ -1,5 +1,5 @@
 import { createContext, useContext, type Ref } from "react";
-import { safeMarkdownUrl } from "../core/markdown";
+import { safeMarkdownUrl, type TextSelection } from "../core/markdown";
 import { markdownTranslator, type MarkdownLocale, type MarkdownTranslator } from "../core/locale";
 import { resolveMarkdownShortcuts, type MarkdownShortcutOverrides } from "../core/markdownShortcuts";
 
@@ -8,6 +8,8 @@ export type MarkdownMode = "live" | "source";
 
 export interface MarkdownEditorHandle {
   focusAt(offset: number): void;
+  getSelection(): TextSelection;
+  anchorAtViewport(y: number, offsets: readonly number[]): number | null;
   openFullscreen(): void;
 }
 

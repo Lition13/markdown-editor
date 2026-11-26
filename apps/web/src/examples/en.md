@@ -9,11 +9,13 @@ Click a paragraph to edit it, or type `/` to find an editing tool. Use the docum
 | Open the editing tools menu | `/` |
 | Switch between editing and source | Ctrl+/ |
 | Insert a table | Ctrl+Alt+T |
+| Show or hide the file manager | Ctrl+Alt+F |
+| Show or hide the document outline | Ctrl+Alt+O |
 | Edit in fullscreen | Alt+Enter |
 | Undo or redo | Ctrl+Z / Ctrl+Y |
 | Exit fullscreen | Esc |
 
-Move the pointer to the top edge to show the toolbar. Switch to the source view to see how this file is written, or use the fullscreen button to focus on the document.
+Move the pointer to the top edge or tap it on a touch screen to show the toolbar. Use the source icon to see how this file is written, or press Alt+Enter in the editor to write in fullscreen.
 
 ## Text and links
 

@@ -27,6 +27,15 @@ export interface FileInput {
 
 export type MarkdownFile = FileEntry & FileInput;
 
+const backupFormat = "lition13-markdown-editor-library";
+
+export interface LibraryBackup {
+  format: typeof backupFormat;
+  version: 1;
+  folders: FolderEntry[];
+  files: (FileInput & { folderId: string | null })[];
+}
+
 interface FileLibrary {
   files: FileEntry[];
   folders: FolderEntry[];
@@ -110,6 +119,99 @@ export function newFiles(inputs: FileInput[], existing: FileEntry[], folderId: s
     const name = reserveFileName(input.name, names);
     return { id: crypto.randomUUID(), name, value: input.value, revision: 0, folderId };
   });
+}
+
+export function makeLibraryBackup(folders: FolderEntry[], files: MarkdownFile[]): LibraryBackup {
+  return {
+    format: backupFormat,
+    version: 1,
+    folders,
+    files: files.map(({ name, value, folderId }) => ({ name, value, folderId: folderId ?? null })),
+  };
+}
+
+function invalidBackup(): never {
+  throw new FileLibraryError("无法读取文件库备份。请选择有效的备份文件。");
+}
+
+function backupRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) invalidBackup();
+  return value as Record<string, unknown>;
+}
+
+function parentFirst(folders: FolderEntry[]) {
+  const children = new Map<string | null, FolderEntry[]>();
+  for (const folder of folders) {
+    const siblings = children.get(folder.parentId);
+    if (siblings) siblings.push(folder);
+    else children.set(folder.parentId, [folder]);
+  }
+  const ordered = [...(children.get(null) ?? [])];
+  for (const folder of ordered) {
+    for (const child of children.get(folder.id) ?? []) ordered.push(child);
+  }
+  if (ordered.length !== folders.length) invalidBackup();
+  return ordered;
+}
+
+export function parseLibraryBackup(text: string): LibraryBackup {
+  let input: unknown;
+  try { input = JSON.parse(text); } catch { invalidBackup(); }
+  const data = backupRecord(input);
+  if (data.format !== backupFormat || data.version !== 1 || !Array.isArray(data.folders) || !Array.isArray(data.files)) invalidBackup();
+  const ids = new Set<string>();
+  const folders = data.folders.map((item: unknown): FolderEntry => {
+    const { id, name, parentId } = backupRecord(item);
+    if (typeof id !== "string" || !id || ids.has(id) || typeof name !== "string"
+      || (parentId !== null && typeof parentId !== "string")) invalidBackup();
+    ids.add(id);
+    return { id, name: cleanName(name, "folder"), parentId };
+  });
+  const files = data.files.map((item: unknown) => {
+    const { name, value, folderId } = backupRecord(item);
+    if (typeof name !== "string" || typeof value !== "string"
+      || (folderId !== null && (typeof folderId !== "string" || !ids.has(folderId)))) invalidBackup();
+    return { name: markdownName(name), value, folderId };
+  });
+  return { format: backupFormat, version: 1, folders: parentFirst(folders), files };
+}
+
+export function planLibraryRestore(backup: LibraryBackup, files: FileEntry[], folders: FolderEntry[]) {
+  const children = new Map<string | null, Map<string, string>>();
+  function folderNames(parentId: string | null) {
+    const existing = children.get(parentId);
+    if (existing) return existing;
+    const names = new Map<string, string>();
+    children.set(parentId, names);
+    return names;
+  }
+  for (const folder of folders) folderNames(folder.parentId).set(nameKey(folder.name), folder.id);
+  const targetIds = new Map<string | null, string | null>([[null, null]]);
+  const addedFolders: FolderEntry[] = [];
+  for (const folder of backup.folders) {
+    const parentId = targetIds.get(folder.parentId);
+    if (parentId === undefined) invalidBackup();
+    const names = folderNames(parentId);
+    const key = nameKey(folder.name);
+    let id = names.get(key);
+    if (id === undefined) {
+      id = crypto.randomUUID();
+      names.set(key, id);
+      addedFolders.push({ id, name: folder.name, parentId });
+    }
+    targetIds.set(folder.id, id);
+  }
+
+  const inputsByFolder = new Map<string | null, FileInput[]>();
+  for (const file of backup.files) {
+    const folderId = targetIds.get(file.folderId);
+    if (folderId === undefined) invalidBackup();
+    const inputs = inputsByFolder.get(folderId);
+    if (inputs) inputs.push(file);
+    else inputsByFolder.set(folderId, [file]);
+  }
+  const addedFiles = [...inputsByFolder].flatMap(([id, inputs]) => newFiles(inputs, files, id));
+  return { files: addedFiles, folders: addedFolders };
 }
 
 export function renamedFile(files: FileEntry[], id: string, input: string): FileEntry {
@@ -354,6 +456,36 @@ export function addFiles(inputs: [FileInput, ...FileInput[]], folderId: string |
     for (const file of created) putFile(tx, file);
     tx.objectStore(settingsStore).put(created[0].id, activeKey);
     return { files: sortByName([...entries, ...created.map(fileEntry)]), current: created[0] };
+  });
+}
+
+export function readBackupLibrary() {
+  return transaction("readonly", async tx => {
+    const [entries, folders] = await Promise.all([
+      read<FileEntry[]>(tx.objectStore(filesStore).getAll()),
+      read<FolderEntry[]>(tx.objectStore(foldersStore).getAll()),
+    ]);
+    return { folders: sortByName(folders), files: await Promise.all(sortByName(entries).map(entry => withText(tx, entry))) };
+  });
+}
+
+export function restoreLibraryBackup(backup: LibraryBackup, selectFirst: boolean): Promise<FileLibrary> {
+  return transaction("readwrite", async tx => {
+    const folderStore = tx.objectStore(foldersStore);
+    const [files, folders] = await Promise.all([
+      read<FileEntry[]>(tx.objectStore(filesStore).getAll()),
+      read<FolderEntry[]>(folderStore.getAll()),
+    ]);
+    const added = planLibraryRestore(backup, files, folders);
+    for (const folder of added.folders) folderStore.add(folder);
+    for (const file of added.files) putFile(tx, file);
+    const current = selectFirst ? added.files[0] ?? null : null;
+    if (current) tx.objectStore(settingsStore).put(current.id, activeKey);
+    return {
+      files: sortByName([...files, ...added.files.map(fileEntry)]),
+      folders: sortByName([...folders, ...added.folders]),
+      current,
+    };
   });
 }
 

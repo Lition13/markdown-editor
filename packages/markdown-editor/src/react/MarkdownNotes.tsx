@@ -93,17 +93,22 @@ function changeIndentation(value: string, range: TextSelection, outdent: boolean
       ? indentLines(value, range, outdent) : null);
 }
 
-function textareaPoint(field: HTMLTextAreaElement, position: number) {
-  const owner = field.ownerDocument;
-  const bounds = field.getBoundingClientRect();
-  const style = owner.defaultView!.getComputedStyle(field);
-  const mirror = owner.createElement("div");
-  const properties = ["font", "lineHeight", "letterSpacing", "padding", "border", "boxSizing", "tabSize", "overflowWrap", "wordBreak", "textAlign"] as const;
-  for (const property of properties) mirror.style[property] = style[property];
+const textareaLayout = ["font", "lineHeight", "letterSpacing", "padding", "border", "boxSizing", "tabSize", "overflowWrap", "wordBreak", "textAlign"] as const;
+
+function textareaMirror(field: HTMLTextAreaElement, bounds: DOMRect, style: CSSStyleDeclaration) {
+  const mirror = field.ownerDocument.createElement("div");
+  for (const property of textareaLayout) mirror.style[property] = style[property];
   Object.assign(mirror.style, {
     position: "fixed", visibility: "hidden", whiteSpace: "pre-wrap", width: `${bounds.width}px`,
     left: `${bounds.left - field.scrollLeft}px`, top: `${bounds.top - field.scrollTop}px`,
   });
+  return mirror;
+}
+
+function textareaPoint(field: HTMLTextAreaElement, position: number) {
+  const owner = field.ownerDocument;
+  const bounds = field.getBoundingClientRect();
+  const mirror = textareaMirror(field, bounds, owner.defaultView!.getComputedStyle(field));
   mirror.textContent = field.value.slice(0, position);
   const caret = owner.createElement("span");
   caret.textContent = field.value.slice(position) || "\u200b";
@@ -112,6 +117,23 @@ function textareaPoint(field: HTMLTextAreaElement, position: number) {
   const rect = caret.getClientRects()[0] ?? bounds;
   mirror.remove();
   return { x: rect.left, y: rect.bottom + 5, aboveY: rect.top };
+}
+
+function textareaAnchorPositions(field: HTMLTextAreaElement, bounds: DOMRect, style: CSSStyleDeclaration, offsets: readonly number[]) {
+  const owner = field.ownerDocument;
+  const mirror = textareaMirror(field, bounds, style);
+  const text = mirror.appendChild(owner.createTextNode(field.value + "\u200b"));
+  const range = owner.createRange();
+  owner.body.append(mirror);
+  try {
+    const top = mirror.getBoundingClientRect().top;
+    return offsets.map(offset => {
+      const at = Number.isFinite(offset) ? Math.max(0, Math.min(field.value.length, Math.trunc(offset))) : 0;
+      range.setStart(text, at);
+      range.setEnd(text, at + 1);
+      return range.getBoundingClientRect().top - top;
+    });
+  } finally { mirror.remove(); }
 }
 
 function revealSourceCaret(field: HTMLTextAreaElement, align?: "start") {
@@ -278,6 +300,7 @@ function Editor({
   const { t, shortcuts: { labels: keys } } = environment;
   const ref = useRef<HTMLTextAreaElement>(null);
   const inline = useRef<InlineMarkdownHandle>(null);
+  const sourceAnchors = useRef<{ value: string; layout: string; offsets: readonly number[]; tops: number[] } | null>(null);
   const pendingFocus = useRef<TextSelection | null>(null);
   const compositionStart = useRef<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
@@ -327,6 +350,24 @@ function Editor({
       onMove();
       focusAt(clampSelection(value, { start: position, end: position }), "start");
       if (!inline.current && !ref.current) setFocusOnLoad(true);
+    },
+    getSelection: range,
+    anchorAtViewport(y, offsets) {
+      if (!offsets.length) return null;
+      const visible = inline.current?.offsetAtViewport(y);
+      if (visible != null) return offsets.findLast(offset => offset <= visible) ?? offsets[0];
+      const field = ref.current;
+      if (!field) return null;
+      const bounds = field.getBoundingClientRect();
+      const style = field.ownerDocument.defaultView!.getComputedStyle(field);
+      const layout = [bounds.width, ...textareaLayout.map(property => style[property])].join("|");
+      let cached = sourceAnchors.current;
+      if (!cached || cached.value !== field.value || cached.layout !== layout || cached.offsets !== offsets) {
+        cached = { value: field.value, layout, offsets, tops: textareaAnchorPositions(field, bounds, style, offsets) };
+        sourceAnchors.current = cached;
+      }
+      const index = cached.tops.findLastIndex(top => top <= y - bounds.top + field.scrollTop);
+      return offsets[Math.max(0, index)];
     },
     openFullscreen() {
       if (!expanded) toggleFullscreen();

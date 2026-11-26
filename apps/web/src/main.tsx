@@ -28,6 +28,8 @@ const shortcutsKey = "lition13-markdown-editor-shortcuts";
 const repository = "https://github.com/Lition13/markdown-editor";
 const compactQuery = "(max-width: 840px)";
 
+type FileOpenRequest = { id: string; keyboard: boolean; alreadyOpen: boolean };
+
 function preference(key: string) {
   try {
     return localStorage.getItem(key);
@@ -123,6 +125,7 @@ function Toolbar({ children, onLocaleChange }: { children: ReactNode; onLocaleCh
 function Workspace({
   library, theme, customThemeActive, toggleTheme, showThemeSettings, compact, filesOpen, outlineOpen, statusOpen, showFiles,
   toggleFiles, toggleOutline, closeOutline, toggleStatus, shortcuts, filesShortcut, outlineShortcut, showShortcuts, onLocaleChange,
+  fileOpenRequest,
 }: {
   library: ReturnType<typeof useFileLibrary>;
   theme: MarkdownTheme;
@@ -143,13 +146,18 @@ function Workspace({
   outlineShortcut: string | null;
   showShortcuts: () => void;
   onLocaleChange: (locale: MarkdownLocale) => void;
+  fileOpenRequest: FileOpenRequest | null;
 }) {
   const locale = useWebLocale();
   const t = webTranslator(locale);
   const filesName = t("文件管理");
   const outlineName = t("文档大纲");
+  const workspace = useRef<HTMLElement>(null);
   const editor = useRef<MarkdownEditorHandle>(null);
   const footer = useRef<HTMLElement>(null);
+  const outlineLinks = useRef<HTMLElement>(null);
+  const positions = useRef(new Map<string, number>());
+  const handledOpen = useRef<FileOpenRequest | null>(null);
   const { current, ready, status, change } = library;
   const documentId = current?.id;
   const [view, setView] = useState<{ documentId: string | undefined; mode: MarkdownMode; headingOffset?: number }>({ documentId, mode: "live" });
@@ -158,7 +166,49 @@ function Workspace({
   const value = current?.value ?? "";
   const inspect = outlineOpen || statusOpen;
   const information = useMemo(() => inspect ? inspectMarkdown(value, locale) : null, [inspect, value, locale]);
-  useLayoutEffect(() => { window.scrollTo(0, 0); }, [documentId]);
+  const anchors = useMemo(() => information?.headings.map(heading => heading.offset) ?? [], [information]);
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+    const documentEditor = editor.current;
+    return () => {
+      if (documentId && documentEditor) positions.current.set(documentId, documentEditor.getSelection().end);
+    };
+  }, [documentId]);
+  useLayoutEffect(() => {
+    if (!fileOpenRequest || fileOpenRequest.id !== documentId || handledOpen.current === fileOpenRequest) return;
+    const frame = requestAnimationFrame(() => {
+      handledOpen.current = fileOpenRequest;
+      const offset = fileOpenRequest.alreadyOpen ? editor.current?.getSelection().end : positions.current.get(fileOpenRequest.id);
+      if (fileOpenRequest.keyboard || (!fileOpenRequest.alreadyOpen && offset)) editor.current?.focusAt(offset ?? 0);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [documentId, fileOpenRequest]);
+  useEffect(() => {
+    if (!outlineOpen || !anchors.length) return;
+    let frame = 0;
+    function followScroll() {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const page = document.scrollingElement;
+        const atEnd = page && page.scrollTop > 0 && page.scrollHeight - page.clientHeight - page.scrollTop <= 2;
+        const toolbarBottom = document.querySelector(".app-header")?.getBoundingClientRect().bottom ?? 0;
+        const offset = atEnd ? anchors[anchors.length - 1] : editor.current?.anchorAtViewport(toolbarBottom + 24, anchors);
+        if (offset != null) setView(previous => previous.headingOffset === offset ? previous : { ...previous, headingOffset: offset });
+      });
+    }
+    window.addEventListener("scroll", followScroll, { passive: true });
+    window.addEventListener("resize", followScroll);
+    const observer = new ResizeObserver(followScroll);
+    if (workspace.current) observer.observe(workspace.current);
+    followScroll();
+    return () => {
+      window.removeEventListener("scroll", followScroll);
+      window.removeEventListener("resize", followScroll);
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [anchors, documentId, mode, outlineOpen]);
   useLayoutEffect(() => {
     const root = document.documentElement;
     const bar = statusOpen ? footer.current : null;
@@ -193,6 +243,16 @@ function Workspace({
   const headings = information?.headings ?? [];
   const shallowest = headings.reduce((level, heading) => Math.min(level, heading.depth), 6);
   const activeHeading = headings.find(heading => heading.offset === headingOffset) ?? headings[0];
+  useLayoutEffect(() => {
+    if (!outlineOpen) return;
+    const panel = outlineLinks.current?.closest<HTMLElement>(".document-outline");
+    const item = outlineLinks.current?.querySelector('[aria-current="location"]');
+    if (!panel || !item) return;
+    const bounds = panel.getBoundingClientRect();
+    const active = item.getBoundingClientRect();
+    if (active.bottom > bounds.bottom) panel.scrollTop += active.bottom - bounds.bottom;
+    else if (active.top < bounds.top) panel.scrollTop += active.top - bounds.top;
+  }, [activeHeading?.offset, compact, documentId, outlineOpen]);
 
   return (
     <>
@@ -237,7 +297,7 @@ function Workspace({
           <Palette size={18} aria-hidden="true" />
         </button>
       </Toolbar>
-      <main className="workspace" aria-busy={!ready || undefined}>
+      <main ref={workspace} className="workspace" aria-busy={!ready || undefined}>
         {current ? (
           <div className="workspace-body">
             <MarkdownEditor
@@ -269,7 +329,7 @@ function Workspace({
           </button>
         </div>
         {headings.length ? (
-          <nav className="outline-links" aria-label={t("章节")}>
+          <nav className="outline-links" ref={outlineLinks} aria-label={t("章节")}>
             {headings.map(heading => (
               <button key={heading.offset} type="button" title={heading.title}
                 style={{ paddingInlineStart: 10 + (heading.depth - shallowest) * 8 }}
@@ -317,6 +377,7 @@ function App() {
   const [shortcuts, setShortcuts] = useState(readShortcuts);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [shortcutStorageFailed, setShortcutStorageFailed] = useState(false);
+  const [fileOpenRequest, setFileOpenRequest] = useState<FileOpenRequest | null>(null);
   const [drawer, setDrawer] = useState(() => {
     const value = preference(drawerKey);
     return value === "files" || value === "outline" ? value : null;
@@ -398,6 +459,12 @@ function App() {
     else setOutlineVisible(false);
   }
 
+  async function openFromFileManager(id: string, keyboard: boolean) {
+    const alreadyOpen = library.current?.id === id;
+    await library.open(id);
+    if (!alreadyOpen || keyboard) setFileOpenRequest({ id, keyboard, alreadyOpen });
+  }
+
   function toggleTheme() {
     const active = theme === "dark" ? "light" : "dark";
     const next: ThemePreference = { ...readTheme(), active };
@@ -436,8 +503,9 @@ function App() {
         shortcuts={shortcuts} filesShortcut={filesShortcut} outlineShortcut={outlineShortcut} showShortcuts={() => setShortcutsOpen(true)}
         toggleTheme={toggleTheme}
         toggleFiles={toggleFiles} toggleOutline={toggleOutline}
-        closeOutline={closeOutline} toggleStatus={() => setStatusOpen(value => !value)} onLocaleChange={changeLocale} />
-      <FileManager library={library} open={filesOpen} compact={compact} onClose={closeFiles} />
+        closeOutline={closeOutline} toggleStatus={() => setStatusOpen(value => !value)} onLocaleChange={changeLocale}
+        fileOpenRequest={fileOpenRequest} />
+      <FileManager library={library} open={filesOpen} compact={compact} onClose={closeFiles} onOpenFile={openFromFileManager} />
       {shortcutsOpen && <ShortcutSettings value={shortcuts} onChange={updateShortcuts} onClose={() => setShortcutsOpen(false)}
         storageFailed={shortcutStorageFailed} />}
       {themeSettingsOpen && <ThemeSettings base={theme} themes={appearance.themes} selected={selectedTheme}
