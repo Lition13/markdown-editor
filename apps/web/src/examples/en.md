@@ -1,8 +1,3 @@
----
-name: markdown-quickstart
-description: A hands-on guide to the Markdown editor.
----
-
 # Getting started
 
 Click a paragraph to edit it, or type `/` to find an editing tool. Use the document outline to jump between sections. This is an ordinary Markdown file, so you can change it, rename it, or export a copy.
@@ -63,7 +58,16 @@ for (const topic of topics) {
 }
 ```
 
-Click inside the code block to try automatic indentation, change the language, or copy the code. The YAML front matter at the top of this file has `name` and `description` fields. The YAML front matter command in the `/` menu adds the same structure to a document such as `SKILL.md`.
+Click inside the code block to try automatic indentation, change the language, or copy the code.
+
+YAML front matter goes at the very top of a Markdown file, between two `---` lines. The YAML front matter command in the `/` menu adds `name` and `description` fields to documents such as `SKILL.md`.
+
+```yaml
+---
+name: markdown-quickstart
+description: A hands-on guide to the Markdown editor.
+---
+```
 
 ## Math and diagrams
 

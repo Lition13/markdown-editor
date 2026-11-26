@@ -572,7 +572,8 @@ test("默认打开完整的英文示例，按语言切换并保留编辑和删�
   const exported = await download;
   expect(exported.suggestedFilename()).toBe("Getting started.md");
   const markdown = await readFile(await exported.path(), "utf8");
-  expect(markdown).toMatch(/^---\nname: markdown-quickstart\ndescription: .+\n---\n/);
+  expect(markdown).toMatch(/^# Getting started\n/);
+  expect(markdown).toMatch(/```yaml\n---\nname: markdown-quickstart\ndescription: .+\n---\n```/);
   expect(markdown).toContain("| Insert a table | Ctrl+Alt+T |");
   expect(markdown).toContain("## Lists and checkboxes");
   expect(markdown).toContain("| :--- | :---: | ---: |");

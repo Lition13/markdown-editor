@@ -1,8 +1,3 @@
----
-name: markdown-quickstart
-description: Markdown 编辑器的上手指南。
----
-
 # 开始写作
 
 点击段落即可编辑，也可以输入 `/` 搜索工具。右侧大纲可以跳到各个章节。这是一份普通的 Markdown 文件，可以改写、重命名或导出一份副本。
@@ -63,7 +58,16 @@ for (const topic of topics) {
 }
 ```
 
-点击代码块即可试用自动缩进、切换语言和复制代码。文件开头的 YAML 文件头包含 `name` 和 `description`。从 `/` 菜单选择「YAML 文件头」，可以给 `SKILL.md` 等文档插入同样的结构。
+点击代码块即可试用自动缩进、切换语言和复制代码。
+
+YAML 文件头放在 Markdown 文件的最开头。从 `/` 菜单选择「YAML 文件头」，可以给 `SKILL.md` 等文档插入包含 `name` 和 `description` 的结构。
+
+```yaml
+---
+name: markdown-quickstart
+description: Markdown 编辑器的上手指南。
+---
+```
 
 ## 公式与图表
 
