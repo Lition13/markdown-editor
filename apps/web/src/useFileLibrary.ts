@@ -1,11 +1,11 @@
 import type { MarkdownLocale } from "@lition13/markdown-editor";
 import { useEffect, useRef, useState } from "react";
 import {
-  addFiles, addFolder, exampleFiles, FileLibraryError, fileEntry, folderRemoval, isOriginalExample, makeLibraryBackup,
+  addFiles, addFolder, exampleFiles, FileLibraryError, fileEntry, folderContents, folderRemoval, importLibraryFiles, isOriginalExample,
   movedFile, movedFolder, moveFile, moveFolder, newFiles, newFolder,
-  openFile, planLibraryRestore, readBackupLibrary, readLibrary, removeFile, removeFolder, renamedFile, renamedFolder,
-  renameFile, renameFolder, restoreLibraryBackup, saveContent, sortByName, syncExampleLanguage,
-  type FileEntry, type FileInput, type FolderEntry, type LibraryBackup, type MarkdownFile,
+  openFile, planLibraryImport, readFileForExport, readFolderForExport, readLibrary, removeFile, removeFolder, renamedFile, renamedFolder,
+  renameFile, renameFolder, saveContent, sortByName, syncExampleLanguage,
+  type FileEntry, type FileInput, type FolderEntry, type LibraryImport, type MarkdownFile,
 } from "./files";
 import type { WebMessage } from "./locale";
 
@@ -162,34 +162,49 @@ export function useFileLibrary(preferredLocale: MarkdownLocale | null) {
     show(created[0]);
   }
 
-  async function backUp() {
-    const content = memory.current;
-    if (content) return makeLibraryBackup(folders, files.map(file => ({ ...file, value: content.get(file.id) ?? "" })));
-    const drafts = [...pending.current].map(([id, edit]) => ({ id, value: edit.value }));
-    const snapshot = await readBackupLibrary();
-    const documents = new Map(snapshot.files.map(file => [file.id, file]));
-    const folderIds = new Set(snapshot.folders.map(folder => folder.id));
-    for (const { id, value } of drafts) {
-      const file = documents.get(id) ?? files.find(entry => entry.id === id);
-      if (!file) continue;
-      documents.set(id, { ...file, value, folderId: file.folderId && folderIds.has(file.folderId) ? file.folderId : null });
-    }
-    return makeLibraryBackup(snapshot.folders, [...documents.values()]);
+  function localValue(id: string) {
+    return active.current?.id === id ? active.current.value : pending.current.get(id)?.value ?? memory.current?.get(id);
   }
 
-  async function restore(backup: LibraryBackup) {
+  async function fileForExport(id: string): Promise<MarkdownFile> {
+    const value = localValue(id);
+    if (active.current?.id === id) return active.current;
+    if (value !== undefined || memory.current) {
+      const entry = files.find(file => file.id === id);
+      if (!entry) throw new FileLibraryError("这个文件已被移除。");
+      return { ...entry, value: value ?? "" };
+    }
+    return readFileForExport(id);
+  }
+
+  async function folderForExport(id: string) {
+    if (memory.current) {
+      const contents = folderContents(id, folders, files);
+      return { ...contents, files: contents.files.map(file => ({ ...file, value: localValue(file.id) ?? "" })) };
+    }
+    const contents = await readFolderForExport(id);
+    return { ...contents, files: contents.files.map(file => ({ ...file, value: localValue(file.id) ?? file.value })) };
+  }
+
+  async function importFiles(batch: LibraryImport, destinationId: string | null) {
     if (!memory.current) {
-      const result = await restoreLibraryBackup(backup, active.current === null);
+      const result = await importLibraryFiles(batch, destinationId);
       setFiles(result.files);
       setFolders(result.folders);
-      if (!active.current && result.current) show(result.current);
-      return;
+      if (result.current) show(result.current);
+      return result;
     }
-    const added = planLibraryRestore(backup, files, folders);
+    const added = planLibraryImport(batch, files, folders, destinationId);
     for (const file of added.files) memory.current.set(file.id, file.value);
-    setFiles(sortByName([...files, ...added.files.map(fileEntry)]));
-    setFolders(sortByName([...folders, ...added.folders]));
-    if (!active.current && added.files.length) show(added.files[0]);
+    const result = {
+      files: sortByName([...files, ...added.files.map(fileEntry)]),
+      folders: sortByName([...folders, ...added.folders]),
+      current: added.files[0] ?? null,
+    };
+    setFiles(result.files);
+    setFolders(result.folders);
+    if (result.current) show(result.current);
+    return result;
   }
 
   function updateEntries(entries: FileEntry[]) {
@@ -266,6 +281,7 @@ export function useFileLibrary(preferredLocale: MarkdownLocale | null) {
 
   return {
     files, folders, current, ready, status, unsavedIds,
-    change, open, add, rename, move, remove, createFolder, changeFolderName, relocateFolder, deleteFolder, backUp, restore,
+    change, open, add, rename, move, remove, createFolder, changeFolderName, relocateFolder, deleteFolder,
+    fileForExport, folderForExport, importFiles,
   };
 }

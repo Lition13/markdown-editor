@@ -10,6 +10,7 @@ Click a paragraph to edit it, or type `/` to find an editing tool. Use the docum
 | Switch between editing and source | Ctrl+/ |
 | Insert a table | Ctrl+Alt+T |
 | Show or hide the file manager | Ctrl+Alt+F |
+| Quickly open a file | Ctrl+P |
 | Show or hide the document outline | Ctrl+Alt+O |
 | Edit in fullscreen | Alt+Enter |
 | Undo or redo | Ctrl+Z / Ctrl+Y |

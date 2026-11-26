@@ -27,11 +27,7 @@ export interface FileInput {
 
 export type MarkdownFile = FileEntry & FileInput;
 
-const backupFormat = "lition13-markdown-editor-library";
-
-export interface LibraryBackup {
-  format: typeof backupFormat;
-  version: 1;
+export interface LibraryImport {
   folders: FolderEntry[];
   files: (FileInput & { folderId: string | null })[];
 }
@@ -121,62 +117,10 @@ export function newFiles(inputs: FileInput[], existing: FileEntry[], folderId: s
   });
 }
 
-export function makeLibraryBackup(folders: FolderEntry[], files: MarkdownFile[]): LibraryBackup {
-  return {
-    format: backupFormat,
-    version: 1,
-    folders,
-    files: files.map(({ name, value, folderId }) => ({ name, value, folderId: folderId ?? null })),
-  };
-}
-
-function invalidBackup(): never {
-  throw new FileLibraryError("无法读取文件库备份。请选择有效的备份文件。");
-}
-
-function backupRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) invalidBackup();
-  return value as Record<string, unknown>;
-}
-
-function parentFirst(folders: FolderEntry[]) {
-  const children = new Map<string | null, FolderEntry[]>();
-  for (const folder of folders) {
-    const siblings = children.get(folder.parentId);
-    if (siblings) siblings.push(folder);
-    else children.set(folder.parentId, [folder]);
+export function planLibraryImport(batch: LibraryImport, files: FileEntry[], folders: FolderEntry[], destinationId: string | null) {
+  if (destinationId !== null && !folders.some(folder => folder.id === destinationId)) {
+    throw new FileLibraryError("目标文件夹已被移除。");
   }
-  const ordered = [...(children.get(null) ?? [])];
-  for (const folder of ordered) {
-    for (const child of children.get(folder.id) ?? []) ordered.push(child);
-  }
-  if (ordered.length !== folders.length) invalidBackup();
-  return ordered;
-}
-
-export function parseLibraryBackup(text: string): LibraryBackup {
-  let input: unknown;
-  try { input = JSON.parse(text); } catch { invalidBackup(); }
-  const data = backupRecord(input);
-  if (data.format !== backupFormat || data.version !== 1 || !Array.isArray(data.folders) || !Array.isArray(data.files)) invalidBackup();
-  const ids = new Set<string>();
-  const folders = data.folders.map((item: unknown): FolderEntry => {
-    const { id, name, parentId } = backupRecord(item);
-    if (typeof id !== "string" || !id || ids.has(id) || typeof name !== "string"
-      || (parentId !== null && typeof parentId !== "string")) invalidBackup();
-    ids.add(id);
-    return { id, name: cleanName(name, "folder"), parentId };
-  });
-  const files = data.files.map((item: unknown) => {
-    const { name, value, folderId } = backupRecord(item);
-    if (typeof name !== "string" || typeof value !== "string"
-      || (folderId !== null && (typeof folderId !== "string" || !ids.has(folderId)))) invalidBackup();
-    return { name: markdownName(name), value, folderId };
-  });
-  return { format: backupFormat, version: 1, folders: parentFirst(folders), files };
-}
-
-export function planLibraryRestore(backup: LibraryBackup, files: FileEntry[], folders: FolderEntry[]) {
   const children = new Map<string | null, Map<string, string>>();
   function folderNames(parentId: string | null) {
     const existing = children.get(parentId);
@@ -186,11 +130,11 @@ export function planLibraryRestore(backup: LibraryBackup, files: FileEntry[], fo
     return names;
   }
   for (const folder of folders) folderNames(folder.parentId).set(nameKey(folder.name), folder.id);
-  const targetIds = new Map<string | null, string | null>([[null, null]]);
+  const targetIds = new Map<string | null, string | null>([[null, destinationId]]);
   const addedFolders: FolderEntry[] = [];
-  for (const folder of backup.folders) {
+  for (const folder of batch.folders) {
     const parentId = targetIds.get(folder.parentId);
-    if (parentId === undefined) invalidBackup();
+    if (parentId === undefined) throw new FileLibraryError("ZIP 中的目录结构无效。");
     const names = folderNames(parentId);
     const key = nameKey(folder.name);
     let id = names.get(key);
@@ -203,9 +147,9 @@ export function planLibraryRestore(backup: LibraryBackup, files: FileEntry[], fo
   }
 
   const inputsByFolder = new Map<string | null, FileInput[]>();
-  for (const file of backup.files) {
+  for (const file of batch.files) {
     const folderId = targetIds.get(file.folderId);
-    if (folderId === undefined) invalidBackup();
+    if (folderId === undefined) throw new FileLibraryError("ZIP 中的目录结构无效。");
     const inputs = inputsByFolder.get(folderId);
     if (inputs) inputs.push(file);
     else inputsByFolder.set(folderId, [file]);
@@ -253,6 +197,24 @@ export function containsFolder(folders: Map<string, FolderEntry>, ancestorId: st
     if (id === ancestorId) return true;
   }
   return false;
+}
+
+export function folderPath(folders: Map<string, FolderEntry>, id: string | null) {
+  const path: FolderEntry[] = [];
+  for (let current = id === null ? undefined : folders.get(id); current;
+    current = current.parentId === null ? undefined : folders.get(current.parentId)) {
+    path.push(current);
+  }
+  return path.reverse();
+}
+
+export function folderContents(id: string, folders: FolderEntry[], files: FileEntry[]) {
+  const byId = new Map(folders.map(folder => [folder.id, folder]));
+  const root = byId.get(id);
+  if (!root) throw new FileLibraryError("这个文件夹已被移除。");
+  const directories = folders.filter(folder => containsFolder(byId, id, folder.id));
+  const descendants = new Set(directories.map(folder => folder.id));
+  return { root, folders: directories, files: files.filter(file => file.folderId && descendants.has(file.folderId)) };
 }
 
 export function movedFolder(folders: FolderEntry[], id: string, parentId: string | null): FolderEntry {
@@ -431,14 +393,22 @@ export function syncExampleLanguage(locale: MarkdownLocale, source: () => Markdo
   });
 }
 
+async function readStoredFile(tx: IDBTransaction, id: string) {
+  const entry = await read<FileEntry | undefined>(tx.objectStore(filesStore).get(id));
+  if (!entry) throw new FileLibraryError("这个文件已被移除。");
+  return withText(tx, entry);
+}
+
 export function openFile(id: string): Promise<MarkdownFile> {
   return transaction("readwrite", async tx => {
-    const entry = await read<FileEntry | undefined>(tx.objectStore(filesStore).get(id));
-    if (!entry) throw new FileLibraryError("这个文件已被移除。");
-    const file = await withText(tx, entry);
+    const file = await readStoredFile(tx, id);
     tx.objectStore(settingsStore).put(id, activeKey);
     return file;
   });
+}
+
+export function readFileForExport(id: string) {
+  return transaction("readonly", tx => readStoredFile(tx, id));
 }
 
 async function confirmFolder(tx: IDBTransaction, folderId: string | null) {
@@ -459,27 +429,28 @@ export function addFiles(inputs: [FileInput, ...FileInput[]], folderId: string |
   });
 }
 
-export function readBackupLibrary() {
+export function readFolderForExport(id: string) {
   return transaction("readonly", async tx => {
     const [entries, folders] = await Promise.all([
       read<FileEntry[]>(tx.objectStore(filesStore).getAll()),
       read<FolderEntry[]>(tx.objectStore(foldersStore).getAll()),
     ]);
-    return { folders: sortByName(folders), files: await Promise.all(sortByName(entries).map(entry => withText(tx, entry))) };
+    const contents = folderContents(id, folders, entries);
+    return { ...contents, files: await Promise.all(contents.files.map(entry => withText(tx, entry))) };
   });
 }
 
-export function restoreLibraryBackup(backup: LibraryBackup, selectFirst: boolean): Promise<FileLibrary> {
+export function importLibraryFiles(batch: LibraryImport, destinationId: string | null): Promise<FileLibrary> {
   return transaction("readwrite", async tx => {
     const folderStore = tx.objectStore(foldersStore);
     const [files, folders] = await Promise.all([
       read<FileEntry[]>(tx.objectStore(filesStore).getAll()),
       read<FolderEntry[]>(folderStore.getAll()),
     ]);
-    const added = planLibraryRestore(backup, files, folders);
+    const added = planLibraryImport(batch, files, folders, destinationId);
     for (const folder of added.folders) folderStore.add(folder);
     for (const file of added.files) putFile(tx, file);
-    const current = selectFirst ? added.files[0] ?? null : null;
+    const current = added.files[0] ?? null;
     if (current) tx.objectStore(settingsStore).put(current.id, activeKey);
     return {
       files: sortByName([...files, ...added.files.map(fileEntry)]),

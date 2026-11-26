@@ -1,7 +1,9 @@
-import { Archive, ChevronRight, Download, FileText, Folder, FolderOpen, FolderPlus, FolderTree, PencilLine, Plus, Search, Trash2, Upload, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { ChevronRight, Download, FileText, Folder, FolderOpen, FolderPlus, FolderTree, PencilLine, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import SidePanel from "./SidePanel";
-import { FileLibraryError, markdownName, parseLibraryBackup, type FileEntry, type FolderEntry, type LibraryBackup, type MarkdownFile } from "./files";
+import { makeFolderZip, readImportFiles } from "./fileArchives";
+import { useResultNavigation } from "./fileSearch";
+import { FileLibraryError, folderPath, markdownName, type FileEntry, type FolderEntry, type MarkdownFile } from "./files";
 import { useWebText, type WebMessage } from "./locale";
 import type { useFileLibrary } from "./useFileLibrary";
 import { useLibraryDrag } from "./useLibraryDrag";
@@ -12,8 +14,7 @@ type FileAction =
   | { type: "rename"; file: FileEntry }
   | { type: "delete"; file: FileEntry }
   | { type: "rename-folder"; folder: FolderEntry }
-  | { type: "delete-folder"; folder: FolderEntry }
-  | { type: "restore"; backup: LibraryBackup; name: string };
+  | { type: "delete-folder"; folder: FolderEntry };
 
 const expandedFoldersKey = "lition13-markdown-editor-expanded-folders";
 
@@ -41,17 +42,7 @@ function exportFile(file: MarkdownFile, panel: HTMLElement, fallbackName: string
   downloadFile(panel, stem + ".md", new Blob([file.value], { type: "text/markdown;charset=utf-8" }));
 }
 
-const searchResultId = (id: string) => "file-search-result-" + id;
-
-function folderPath(folders: Map<string, FolderEntry>, id: string | null) {
-  const path: FolderEntry[] = [];
-  let current = id === null ? undefined : folders.get(id);
-  while (current) {
-    path.unshift(current);
-    current = current.parentId === null ? undefined : folders.get(current.parentId);
-  }
-  return path;
-}
+const searchResultId = (id: string) => "library-row-" + id;
 
 function groupByFolder<T>(entries: T[], parentId: (entry: T) => string | null) {
   const groups = new Map<string | null, T[]>();
@@ -64,28 +55,26 @@ function groupByFolder<T>(entries: T[], parentId: (entry: T) => string | null) {
   return groups;
 }
 
-export default function FileManager({ library, open, compact, onClose, onOpenFile }: {
+export default function FileManager({ library, open, compact, onClose, onOpenFile, searchFocusRequest }: {
   library: ReturnType<typeof useFileLibrary>;
   open: boolean;
   compact: boolean;
   onClose: () => void;
   onOpenFile: (id: string, keyboard: boolean) => Promise<void>;
+  searchFocusRequest: number;
 }) {
   const t = useWebText();
   const [query, setQuery] = useState("");
-  const [resultId, setResultId] = useState<string | null>(null);
   const [action, setAction] = useState<FileAction | null>(null);
   const [name, setName] = useState("");
   const [folderId, setFolderId] = useState<string | null>();
   const [openFolders, setOpenFolders] = useState(readExpandedFolders);
   const [error, setError] = useState<WebMessage | "">("");
-  const [restored, setRestored] = useState(false);
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const backupInput = useRef<HTMLInputElement>(null);
-  const restoreButton = useRef<HTMLButtonElement>(null);
   const search = useRef<HTMLInputElement>(null);
+  const focusedRequest = useRef(searchFocusRequest);
   const nameInput = useRef<HTMLInputElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
   const previousControl = useRef<HTMLButtonElement | null>(null);
@@ -101,8 +90,30 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
   const currentFolder = selected && foldersById.has(selected) ? selected : null;
   const placement = folderPath(foldersById, currentFolder).map(part => part.name).join(" / ");
   const searchTerm = query.normalize("NFC").trim().toLowerCase();
-  const matches = searchTerm ? files.filter(file => file.name.normalize("NFC").toLowerCase().includes(searchTerm)) : [];
-  const activeMatch = matches.find(file => file.id === resultId) ?? matches[0];
+  const matches = useMemo(() => searchTerm
+    ? files.filter(file => file.name.normalize("NFC").toLowerCase().includes(searchTerm)) : [], [files, searchTerm]);
+  const results = useMemo(() => {
+    if (searchTerm) return matches;
+    const rows: (FileEntry | FolderEntry)[] = [];
+    function visit(parent: string | null) {
+      for (const folder of childFolders.get(parent) ?? []) {
+        rows.push(folder);
+        if (expanded.has(folder.id)) visit(folder.id);
+      }
+      for (const file of childFiles.get(parent) ?? []) rows.push(file);
+    }
+    visit(null);
+    return rows;
+  }, [searchTerm, matches, expanded, childFiles, childFolders]);
+  const { active, select: selectResult, onKeyDown: searchKeys } = useResultNavigation<FileEntry | FolderEntry>(results, {
+    selectFirst: Boolean(searchTerm), disabled: busy, elementId: searchResultId,
+    onAccept(entry) {
+      if ("parentId" in entry) {
+        toggleFolder(entry.id);
+        selectResult(entry.id);
+      } else openResult(entry, true);
+    },
+  });
   const movement = useLibraryDrag({
     folders: foldersById,
     open,
@@ -135,14 +146,19 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
     if (open) return;
     setAction(null);
     setError("");
-    setRestored(false);
     setQuery("");
-    setResultId(null);
-  }, [open]);
+    selectResult(null);
+  }, [open, selectResult]);
+  useLayoutEffect(() => {
+    if (!open || focusedRequest.current === searchFocusRequest) return;
+    focusedRequest.current = searchFocusRequest;
+    const frame = requestAnimationFrame(() => search.current?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(frame);
+  }, [open, searchFocusRequest]);
 
   useEffect(() => {
     if (!action) return;
-    if (action.type === "delete" || action.type === "delete-folder" || action.type === "restore") cancelButton.current?.focus();
+    if (action.type === "delete" || action.type === "delete-folder") cancelButton.current?.focus();
     else {
       nameInput.current?.focus();
       nameInput.current?.select();
@@ -173,7 +189,7 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
     movement.reset();
     setFolderId(next);
     setQuery("");
-    setResultId(null);
+    selectResult(null);
     setAction(null);
     setError("");
   }
@@ -188,8 +204,8 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
     });
   }
 
-  function revealFolder(id: string | null, createdId?: string) {
-    const path = folderPath(foldersById, id).map(folder => folder.id);
+  function revealFolder(id: string | null, createdId?: string, lookup = foldersById) {
+    const path = folderPath(lookup, id).map(folder => folder.id);
     if (createdId) path.push(createdId);
     if (path.length) setOpenFolders(previous => new Set([...(previous ?? expanded), ...path]));
   }
@@ -201,18 +217,17 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
     else onClose();
   }
 
-  async function run(operation: () => Promise<void>, activate = false) {
+  async function run(operation: () => Promise<void>, finish: "action" | "open" | "export" = "action") {
     if (locked.current) return;
     locked.current = true;
     setBusy(true);
     setError("");
-    setRestored(false);
     try {
       await operation();
-      if (activate) {
+      if (finish === "open") {
         setAction(null);
         if (compact) onClose();
-      } else if (action) dismissAction();
+      } else if (action && finish === "action") dismissAction();
     } catch (error) {
       setError(error instanceof FileLibraryError ? error.label : "无法读取或保存文件，请重试。");
     } finally {
@@ -227,28 +242,22 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
       await onOpenFile(file.id, keyboard);
       selectFolder(parent);
       revealFolder(parent);
-    }, true);
+    }, "open");
   }
 
-  function searchKeys(event: KeyboardEvent<HTMLInputElement>) {
-    if (!activeMatch || busy || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229
-      || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-    if (event.key === "Enter") {
-      event.preventDefault();
-      if (!event.repeat) openResult(activeMatch, true);
-    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      const at = matches.indexOf(activeMatch) + (event.key === "ArrowDown" ? 1 : -1);
-      const next = matches[Math.max(0, Math.min(matches.length - 1, at))];
-      setResultId(next.id);
-      document.getElementById(searchResultId(next.id))?.scrollIntoView({ block: "nearest" });
-    }
+  function exportEntry(entry: FileEntry | FolderEntry, button: HTMLButtonElement) {
+    const panel = button.closest<HTMLElement>(".file-manager");
+    if (!panel) return;
+    void run(async () => {
+      if ("parentId" in entry) {
+        const { name, blob } = await makeFolderZip(await library.folderForExport(entry.id));
+        downloadFile(panel, name, blob);
+      } else exportFile(await library.fileForExport(entry.id), panel, t("未命名"));
+    }, "export");
   }
 
   const deleting = action?.type === "delete" || action?.type === "delete-folder";
   const creating = action?.type === "new" || action?.type === "new-folder";
-  const restoring = action?.type === "restore";
-  const backupFolders = new Map((restoring ? action.backup.folders : []).map(folder => [folder.id, folder]));
   const placementTitle = t("存放到 {name}", { name: placement || t("文件库") });
 
   function renderFile(file: FileEntry) {
@@ -258,7 +267,7 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
       <li key={file.id}>
         <div className={`library-row${isCurrent ? " is-current" : ""}`}>
           <button type="button" className="file-open" aria-current={isCurrent ? "true" : undefined}
-            id={searchTerm ? searchResultId(file.id) : undefined} data-search-active={activeMatch?.id === file.id || undefined}
+            id={searchResultId(file.id)} data-search-active={active?.id === file.id || undefined}
             {...movement.rowProps({ kind: "file", id: file.id, name: file.name, parentId })}
             title={file.name} disabled={busy} onClick={() => openResult(file)}>
             {!searchTerm && <span className="folder-chevron" aria-hidden="true" />}
@@ -270,6 +279,10 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
               )}
             </span>
             {unsavedIds.includes(file.id) && <span className="file-unsaved">{t("未保存")}</span>}
+          </button>
+          <button type="button" className="icon-control file-row-tool" title={t("导出为 Markdown")}
+            aria-label={t("导出 {name}", { name: file.name })} disabled={busy} onClick={event => exportEntry(file, event.currentTarget)}>
+            <Download size={15} aria-hidden="true" />
           </button>
           <button type="button" className="icon-control file-row-tool" title={t("重命名")} aria-label={t("重命名 {name}", { name: file.name })}
             disabled={busy} onClick={event => begin({ type: "rename", file }, event.currentTarget)}>
@@ -292,12 +305,17 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
       <li key={folder.id}>
         <div className="library-row folder-row" {...movement.targetProps(folder.id)}>
           <button type="button" className="file-open" title={folder.name} disabled={busy}
+            id={searchResultId(folder.id)} data-search-active={active?.id === folder.id || undefined}
             aria-expanded={expandedHere} aria-controls={branch} aria-current={currentFolder === folder.id ? "location" : undefined}
             {...movement.rowProps({ kind: "folder", id: folder.id, name: folder.name, parentId: folder.parentId })}
             onClick={() => toggleFolder(folder.id)}>
             <ChevronRight size={12} className="folder-chevron" aria-hidden="true" />
             <span className="file-kind-icon" aria-hidden="true"><FolderIcon size={16} /></span>
             <span className="file-list-name">{folder.name}</span>
+          </button>
+          <button type="button" className="icon-control file-row-tool" title={t("导出为 ZIP")}
+            aria-label={t("导出文件夹 {name}", { name: folder.name })} disabled={busy} onClick={event => exportEntry(folder, event.currentTarget)}>
+            <Download size={15} aria-hidden="true" />
           </button>
           <button type="button" className="icon-control file-row-tool" aria-label={t("重命名文件夹 {name}", { name: folder.name })} title={t("重命名文件夹")}
             disabled={busy} onClick={event => begin({ type: "rename-folder", folder }, event.currentTarget)}>
@@ -346,76 +364,35 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
           }}>
             <Upload size={16} aria-hidden="true" />{t("导入")}
           </button>
-          <button type="button" className="button" title={t("导出当前文件为 .md")} disabled={!current || busy}
-            onClick={event => {
-              const panel = event.currentTarget.closest<HTMLElement>(".file-manager");
-              if (current && panel) exportFile(current, panel, t("未命名"));
-            }}>
-            <Download size={16} aria-hidden="true" />{t("导出")}
-          </button>
-          <button type="button" className="button" title={t("备份文件库")} aria-label={t("备份文件库")} disabled={busy || !ready}
-            onClick={event => {
-              const panel = event.currentTarget.closest<HTMLElement>(".file-manager");
-              if (!panel) return;
-              void run(async () => {
-                const backup = await library.backUp();
-                downloadFile(panel, "markdown-library-backup.json", new Blob([JSON.stringify(backup)], { type: "application/json" }));
-              });
-            }}>
-            <Archive size={16} aria-hidden="true" />{t("备份")}
-          </button>
-          <button type="button" className="button" ref={restoreButton} title={t("恢复备份")} aria-label={t("恢复备份")} disabled={busy || !ready}
-            onClick={() => {
-              movement.reset();
-              setAction(null);
-              setError("");
-              setRestored(false);
-              backupInput.current?.click();
-            }}>
-            <Upload size={16} aria-hidden="true" />{t("恢复")}
-          </button>
           <input
             ref={fileInput}
             type="file"
             hidden
             multiple
-            aria-label={t("选择 Markdown 文件")}
-            accept=".md,.markdown,.txt,text/markdown,text/plain"
+            aria-label={t("选择 Markdown 或 ZIP 文件")}
+            accept=".md,.markdown,.txt,.zip,text/markdown,text/plain,application/zip,application/x-zip-compressed"
             onChange={event => {
               const selected = Array.from(event.currentTarget.files ?? []);
               event.currentTarget.value = "";
               if (!selected.length) return;
               void run(async () => {
-                const [first, ...rest] = await Promise.all(selected.map(async file => ({
-                  name: markdownName(file.name),
-                  value: await file.text(),
-                })));
-                await library.add([first, ...rest], currentFolder);
-                selectFolder(currentFolder);
-                revealFolder(currentFolder);
-              }, true);
+                const imported = await library.importFiles(await readImportFiles(selected), currentFolder);
+                const location = imported.current ? imported.current.folderId ?? null : currentFolder;
+                selectFolder(location);
+                revealFolder(location, undefined, new Map(imported.folders.map(folder => [folder.id, folder])));
+                if (compact && imported.current) onClose();
+              });
             }}
           />
-          <input ref={backupInput} type="file" hidden accept=".json,application/json" aria-label={t("选择文件库备份")}
-            onChange={event => {
-              const selected = event.currentTarget.files?.[0];
-              event.currentTarget.value = "";
-              if (!selected) return;
-              void run(async () => {
-                const backup = parseLibraryBackup(await selected.text());
-                previousControl.current = restoreButton.current;
-                setAction({ type: "restore", backup, name: selected.name });
-              });
-            }} />
         </div>
         <label className="file-search">
           <Search size={17} aria-hidden="true" />
           <input ref={search} type="search" placeholder={t("搜索文件名")} aria-label={t("搜索文件名")}
-            aria-controls={activeMatch ? "file-search-results" : undefined}
-            aria-activedescendant={activeMatch ? searchResultId(activeMatch.id) : undefined}
+            aria-controls={results.length ? "file-search-results" : undefined}
+            aria-activedescendant={active ? searchResultId(active.id) : undefined}
             value={query} onKeyDown={searchKeys} onChange={event => {
               setQuery(event.currentTarget.value);
-              setResultId(null);
+              selectResult(null);
             }} />
         </label>
         <div className="library-location">
@@ -425,35 +402,7 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
           </button>
           {placement && <span className="library-placement" title={placementTitle} aria-live="polite">{placementTitle}</span>}
         </div>
-        {restoring ? (
-          <section className="file-action backup-preview" aria-label={t("恢复「{name}」", { name: action.name })}>
-            <h3>{t("恢复「{name}」", { name: action.name })}</h3>
-            <p>{t("备份中有 {files} 个文件和 {folders} 个文件夹。", {
-              files: action.backup.files.length, folders: action.backup.folders.length,
-            })}</p>
-            <p>{t("同名文件夹会合并，同名文件会自动编号。")}</p>
-            <details>
-              <summary>{t("查看备份内容")}</summary>
-              <ul>
-                {action.backup.folders.map(folder => (
-                  <li key={folder.id}>{folderPath(backupFolders, folder.id).map(part => part.name).join("/")}/</li>
-                ))}
-                {action.backup.files.map((file, index) => (
-                  <li key={index}>{[...folderPath(backupFolders, file.folderId).map(part => part.name), file.name].join("/")}</li>
-                ))}
-              </ul>
-            </details>
-            <div className="file-action-buttons">
-              <button type="button" className="button" ref={cancelButton} disabled={busy} onClick={dismissAction}>{t("取消")}</button>
-              <button type="button" className="button primary" disabled={busy} onClick={() => {
-                void run(async () => {
-                  await library.restore(action.backup);
-                  setRestored(true);
-                });
-              }}>{t("确认恢复")}</button>
-            </div>
-          </section>
-        ) : deleting ? (
+        {deleting ? (
           <div className="file-action">
             {action.type === "delete" ? <p>{t("删除「{name}」？", { name: action.file.name })}</p>
               : <p>{t("删除「{name}」？其中的文件和子文件夹会移到上一级。", { name: action.folder.name })}</p>}
@@ -491,7 +440,7 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
                 revealFolder(currentFolder, folder.id);
               } else if (action.type === "rename-folder") await library.changeFolderName(action.folder.id, name);
               else if (action.type === "rename") await library.rename(action.file.id, name);
-            }, action.type === "new");
+            }, action.type === "new" ? "open" : "action");
           }}>
             <label htmlFor="library-file-name">{
               action.type === "new" ? t("新建文件名") : action.type === "new-folder" ? t("文件夹名称")
@@ -506,16 +455,15 @@ export default function FileManager({ library, open, compact, onClose, onOpenFil
           </form>
         )}
         {error && <p className="library-error" role="alert">{t(error)}</p>}
-        {restored && <p className="library-notice" role="status">{t("备份已恢复。")}</p>}
       </div>
       {(searchTerm ? matches.length > 0 : childFolders.has(null) || childFiles.has(null)) ? (
-        <ul id={searchTerm ? "file-search-results" : undefined} className="library-files"
+        <ul id="file-search-results" className="library-files"
           aria-label={searchTerm ? t("文件搜索结果") : t("文件和文件夹")} data-file-scroll="">
           {searchTerm ? matches.map(renderFile) : renderBranch(null, 0)}
         </ul>
       ) : (
         <p className="library-empty">
-          {!ready ? t("正在读取文件…") : searchTerm ? t("没有匹配的文件") : t("还没有文件。可新建一篇或导入 Markdown 文件。")}
+          {!ready ? t("正在读取文件…") : searchTerm ? t("没有匹配的文件") : t("还没有文件。可新建一篇或导入 Markdown 或 ZIP 文件。")}
         </p>
       )}
       {picked && (

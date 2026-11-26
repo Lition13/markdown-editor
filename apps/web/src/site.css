@@ -357,7 +357,7 @@ aside.side-panel {
 }
 .file-manager { grid-column: 1; border-inline-end: 1px solid var(--edge); }
 .document-outline { grid-column: 3; border-inline-start: 1px solid var(--edge); }
-body:has(dialog.side-panel[open]) { overflow: hidden; }
+body:has(dialog:is(.side-panel, .quick-open)[open]) { overflow: hidden; }
 dialog.side-panel {
   position: fixed;
   inset: 0 auto 0 0;
@@ -382,6 +382,7 @@ dialog.side-panel::backdrop { background: #101a3278; }
 .file-manager-heading h2 { display: flex; align-items: center; gap: 6px; margin: 0; font-size: .92rem; font-weight: 670; }
 .library-controls { display: grid; gap: 9px; padding: 11px 10px 9px; }
 .library-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.library-tools > button:last-of-type { grid-column: 1 / -1; }
 .library-tools .button { gap: 5px; min-height: 34px; padding-inline: 4px; font-size: .81rem; }
 .library-tools .button:not(.primary) { background: var(--panel); }
 .library-tools .button:not(.primary):hover { background: var(--panel-soft); }
@@ -410,6 +411,74 @@ dialog.side-panel::backdrop { background: #101a3278; }
   font-size: .9rem;
 }
 .file-search input::placeholder { color: var(--muted); }
+.quick-open {
+  position: fixed;
+  inset: min(10dvh, 75px) 0 auto;
+  margin: 0 auto;
+  width: min(560px, calc(100% - 24px));
+  max-height: calc(100dvh - min(10dvh, 75px) - 12px);
+  padding: 0;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.quick-open::backdrop { background: #101a3250; }
+.quick-open-body { display: flex; flex-direction: column; max-height: inherit; overflow: hidden; }
+.quick-open-query {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px 7px 12px;
+  border-bottom: 1px solid var(--edge);
+  color: var(--muted);
+}
+.quick-open-query > :is(svg, button) { flex: none; }
+.quick-open-query input {
+  flex: 1;
+  min-width: 0;
+  min-height: 35px;
+  padding: 4px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+.quick-open-query input::placeholder { color: var(--muted); }
+.quick-open-query:focus-within { border-color: var(--accent); }
+.quick-open-results {
+  min-height: 0;
+  margin: 0;
+  padding: 5px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+.quick-open-results button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 37px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  text-align: start;
+  cursor: pointer;
+}
+.quick-open-results button:hover { background: var(--panel-soft); }
+.quick-open-results button[aria-selected="true"] { background: var(--soft-accent); color: var(--accent-text, var(--accent)); }
+.quick-open-results button > svg { flex: none; }
+.quick-open-name, .quick-open-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-open-name:not(:last-child) { max-width: 65%; flex: none; }
+.quick-open-path { color: var(--muted); font-size: .8rem; }
+.quick-open-empty, .quick-open-error { margin: 0; padding: 12px; color: var(--muted); font-size: .875rem; }
+.quick-open-error { color: var(--error); }
 .file-action {
   display: grid;
   gap: 9px;
@@ -420,9 +489,6 @@ dialog.side-panel::backdrop { background: #101a3278; }
   font-size: .875rem;
 }
 .file-action :is(p, label) { margin: 0; overflow-wrap: anywhere; }
-.backup-preview h3 { margin: 0; font-size: .875rem; overflow-wrap: anywhere; }
-.backup-preview summary { cursor: pointer; }
-.backup-preview ul { max-block-size: 9rem; margin: 6px 0 0; padding-inline-start: 18px; overflow: auto; overflow-wrap: anywhere; }
 .file-action :is(input, select) {
   width: 100%;
   min-width: 0;
@@ -438,7 +504,6 @@ dialog.side-panel::backdrop { background: #101a3278; }
 .button.danger { color: var(--error); }
 .button.danger:hover { border-color: var(--error); }
 .library-error { margin: 2px 0 0; color: var(--error); font-size: .875rem; }
-.library-notice { margin: 2px 0 0; color: var(--accent-text, var(--accent)); font-size: .875rem; }
 .library-location { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .library-root {
   display: flex;

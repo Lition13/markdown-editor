@@ -277,6 +277,28 @@ test("文件管理快捷键可开关侧栏和抽屉，修改后刷新保留", as
   await expect(files).toBeHidden();
 });
 
+test("快速打开快捷键可重新绑定，并检测与文件管理的冲突", async ({ page }) => {
+  await page.goto("./");
+  await expect(notes(page)).toBeVisible();
+  const settings = await openSettings(page);
+  const form = await editShortcut(settings, "快速打开文件");
+  const input = form.getByRole("textbox", { name: "快捷键组合", exact: true });
+  const save = form.getByRole("button", { name: "保存", exact: true });
+  await expect(input).toHaveValue("Ctrl+P");
+  await input.fill("Ctrl+Alt+F");
+  await expect(form.getByRole("alert")).toHaveText("与「切换文件管理」的快捷键冲突。");
+  await expect(save).toBeDisabled();
+  await input.fill("Ctrl+Shift+F8");
+  await save.click();
+  await closeSettings(settings);
+  await page.reload();
+  await expect(notes(page)).toBeVisible();
+  await page.keyboard.press("Control+Shift+F8");
+  await expect(page.getByRole("combobox", { name: "输入文件名或路径", exact: true })).toBeFocused();
+  await page.keyboard.press("Control+Shift+F8");
+  await expect(page.getByRole("dialog", { name: "快速打开文件", exact: true })).toBeHidden();
+});
+
 test("升级后保留占用文件管理默认键的旧大纲绑定", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("lition13-markdown-editor-shortcuts", JSON.stringify({ outline: "Ctrl+Alt+F" })));
   await page.goto("./");

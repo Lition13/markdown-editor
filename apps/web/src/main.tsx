@@ -9,6 +9,7 @@ import "@lition13/markdown-editor/style.css";
 import FileManager from "./FileManager";
 import LanguageMenu from "./LanguageMenu";
 import { defaultWebLocale, formatDocumentCount, useWebLocale, useWebText, WebLocale, webTranslator } from "./locale";
+import QuickOpen from "./QuickOpen";
 import ShortcutSettings from "./ShortcutSettings";
 import SidePanel from "./SidePanel";
 import ThemeSettings from "./ThemeSettings";
@@ -376,8 +377,11 @@ function App() {
   const [statusOpen, setStatusOpen] = useVisibility(statusKey);
   const [shortcuts, setShortcuts] = useState(readShortcuts);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
   const [shortcutStorageFailed, setShortcutStorageFailed] = useState(false);
   const [fileOpenRequest, setFileOpenRequest] = useState<FileOpenRequest | null>(null);
+  const [searchFocusRequest, setSearchFocusRequest] = useState(0);
+  const filesReturnFocus = useRef<HTMLElement | null>(null);
   const [drawer, setDrawer] = useState(() => {
     const value = preference(drawerKey);
     return value === "files" || value === "outline" ? value : null;
@@ -386,6 +390,7 @@ function App() {
   const outlineOpen = compact ? drawer === "outline" : outlineVisible;
   const filesShortcut = getPanelShortcut("files", shortcuts);
   const outlineShortcut = getPanelShortcut("outline", shortcuts);
+  const quickOpenShortcut = getPanelShortcut("quickOpen", shortcuts);
   const toggleFiles = useCallback(() => {
     if (compact) setDrawer(current => current === "files" ? null : "files");
     else setFilesVisible(visible => !visible);
@@ -394,23 +399,44 @@ function App() {
     if (compact) setDrawer(current => current === "outline" ? null : "outline");
     else setOutlineVisible(visible => !visible);
   }, [compact, setOutlineVisible]);
+  const toggleFilesWithKeyboard = useCallback(() => {
+    if (!filesOpen) {
+      filesReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setSearchFocusRequest(previous => previous + 1);
+    } else if (document.activeElement?.closest("#file-manager")) {
+      const previous = filesReturnFocus.current;
+      if (previous) requestAnimationFrame(() => { if (previous.isConnected) previous.focus({ preventScroll: true }); });
+    }
+    toggleFiles();
+  }, [filesOpen, toggleFiles]);
+  useEffect(() => { if (!filesOpen) filesReturnFocus.current = null; }, [filesOpen]);
 
   useEffect(() => {
     const panelKeys = new Map<string, { id: string; toggle: () => void }>();
-    if (filesShortcut && library.ready) panelKeys.set(filesShortcut, { id: "file-manager", toggle: toggleFiles });
+    if (filesShortcut && library.ready) panelKeys.set(filesShortcut, { id: "file-manager", toggle: toggleFilesWithKeyboard });
     if (outlineShortcut) panelKeys.set(outlineShortcut, { id: "document-outline", toggle: toggleOutline });
+    if (quickOpenShortcut && library.ready) panelKeys.set(quickOpenShortcut, {
+      id: "quick-open",
+      toggle() {
+        const picker = document.querySelector<HTMLDialogElement>("#quick-open[open]");
+        if (!picker) setQuickOpen(true);
+        else if (picker.getAttribute("aria-busy") !== "true") picker.close();
+      },
+    });
     if (!panelKeys.size) return;
     function onPanelKey(event: KeyboardEvent) {
       if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
       const panel = panelKeys.get(markdownShortcutFromEvent(event));
-      if (!panel || document.querySelector(`dialog[open]:not(#${panel.id})`)) return;
+      if (!panel) return;
+      const allowed = panel.id === "quick-open" ? "#quick-open, #file-manager, #document-outline, .markdown-editor-modal" : "#" + panel.id;
+      if (document.querySelector(`dialog[open]:not(${allowed})`)) return;
       event.preventDefault();
       event.stopPropagation();
       if (!event.repeat) panel.toggle();
     }
     document.addEventListener("keydown", onPanelKey, true);
     return () => document.removeEventListener("keydown", onPanelKey, true);
-  }, [filesShortcut, library.ready, outlineShortcut, toggleFiles, toggleOutline]);
+  }, [filesShortcut, library.ready, outlineShortcut, quickOpenShortcut, toggleFilesWithKeyboard, toggleOutline]);
 
   useLayoutEffect(() => {
     document.documentElement.lang = locale;
@@ -459,7 +485,7 @@ function App() {
     else setOutlineVisible(false);
   }
 
-  async function openFromFileManager(id: string, keyboard: boolean) {
+  async function openInEditor(id: string, keyboard: boolean) {
     const alreadyOpen = library.current?.id === id;
     await library.open(id);
     if (!alreadyOpen || keyboard) setFileOpenRequest({ id, keyboard, alreadyOpen });
@@ -505,7 +531,12 @@ function App() {
         toggleFiles={toggleFiles} toggleOutline={toggleOutline}
         closeOutline={closeOutline} toggleStatus={() => setStatusOpen(value => !value)} onLocaleChange={changeLocale}
         fileOpenRequest={fileOpenRequest} />
-      <FileManager library={library} open={filesOpen} compact={compact} onClose={closeFiles} onOpenFile={openFromFileManager} />
+      <FileManager library={library} open={filesOpen} compact={compact} onClose={closeFiles} onOpenFile={openInEditor}
+        searchFocusRequest={searchFocusRequest} />
+      {quickOpen && <QuickOpen files={library.files} folders={library.folders} onClose={() => setQuickOpen(false)} onOpen={async id => {
+        await openInEditor(id, true);
+        if (compact) setDrawer(null);
+      }} />}
       {shortcutsOpen && <ShortcutSettings value={shortcuts} onChange={updateShortcuts} onClose={() => setShortcutsOpen(false)}
         storageFailed={shortcutStorageFailed} />}
       {themeSettingsOpen && <ThemeSettings base={theme} themes={appearance.themes} selected={selectedTheme}

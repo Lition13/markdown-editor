@@ -197,7 +197,7 @@ test("首击在正文准确落下光标，斜杠菜单按选区应用工具", as
   await page.goto("./");
   await expect(page.locator(".save-status")).toHaveText("示例文档");
   const files = await fileManager(page);
-  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+  await files.getByLabel("选择 Markdown 或 ZIP 文件").setInputFiles({
     name: "首击验收.md", mimeType: "text/markdown", buffer: Buffer.from("这里是一段可点击定位的正文。\n\n下一段"),
   });
   await expect(page.locator(".document-name")).toHaveText("首击验收.md");

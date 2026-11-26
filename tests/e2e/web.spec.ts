@@ -55,7 +55,7 @@ test("导入 Markdown、编辑、刷新恢复、导出并重新导入", async ({
   await expect(liveMode).toHaveAttribute("aria-pressed", "true");
   await expect(sourceMode).toHaveAttribute("aria-pressed", "false");
   let files = await fileManager(page);
-  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+  await files.getByLabel("选择 Markdown 或 ZIP 文件").setInputFiles({
     name: "验收.markdown", mimeType: "text/markdown", buffer: Buffer.from(source),
   });
   await expect(page.locator(".document-name")).toHaveText("验收.markdown");
@@ -97,12 +97,12 @@ test("导入 Markdown、编辑、刷新恢复、导出并重新导入", async ({
   await expect(editor).toHaveValue(edited);
   files = await fileManager(page);
   const downloaded = page.waitForEvent("download");
-  await files.getByRole("button", { name: "导出", exact: true }).click();
+  await files.getByRole("button", { name: "导出 验收.markdown", exact: true }).click();
   const file = await downloaded;
   expect(file.suggestedFilename()).toBe("验收.md");
   const content = await readFile(await file.path(), "utf8");
   expect(content).toBe(edited);
-  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+  await files.getByLabel("选择 Markdown 或 ZIP 文件").setInputFiles({
     name: file.suggestedFilename(), mimeType: "text/markdown", buffer: Buffer.from(content),
   });
   await expect(page.locator(".document-name")).toHaveText("验收.md");
@@ -125,7 +125,7 @@ test("源码占用同一块正文区，长文档随页面滚动", async ({ page 
   await expect(page.locator("#workspace-status")).toBeVisible();
   await expect(sourceMode).toBeEnabled();
   const files = await fileManager(page);
-  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+  await files.getByLabel("选择 Markdown 或 ZIP 文件").setInputFiles({
     name: "正文区.md", mimeType: "text/markdown", buffer: Buffer.from("一段简短的正文"),
   });
   await expect(editor).toHaveText("一段简短的正文");
@@ -260,7 +260,7 @@ test("旧版草稿完整迁入文件库，删除最后一份后保持空库", as
   await expect(files.getByRole("listitem")).toHaveCount(1);
   await files.getByRole("button", { name: "删除 " + legacy.name, exact: true }).click();
   await files.getByRole("button", { name: "确认删除", exact: true }).click();
-  await expect(files.getByRole("button", { name: "导出", exact: true })).toBeDisabled();
+  await expect(files.getByRole("button", { name: /^导出 / })).toHaveCount(0);
   await files.getByRole("button", { name: "关闭文件管理" }).click();
   await expect(page.getByRole("heading", { name: "暂无 Markdown 文件" })).toBeVisible();
   await page.reload();
@@ -284,13 +284,8 @@ test("两个标签页编辑同一文件时保留已保存内容，并可导出�
 
   const files = await fileManager(second);
   const download = second.waitForEvent("download");
-  await files.getByRole("button", { name: "导出", exact: true }).click();
+  await files.getByRole("button", { name: "导出 入门示例.md", exact: true }).click();
   expect(await readFile(await (await download).path(), "utf8")).toBe("另一页正在编辑的版本");
-  const [backup] = await Promise.all([
-    second.waitForEvent("download"), files.getByRole("button", { name: "备份文件库", exact: true }).click(),
-  ]);
-  const snapshot = JSON.parse(await readFile(await backup.path(), "utf8"));
-  expect(snapshot.files).toEqual(expect.arrayContaining([expect.objectContaining({ value: "另一页正在编辑的版本" })]));
   await second.reload();
   await expect(second.getByRole("textbox", editor)).toHaveText("先保存的版本");
 });
@@ -351,7 +346,7 @@ test("自定义主题预览后应用到工作区、代码和全屏，刷新后�
   await page.goto("./");
   const files = await fileManager(page);
   const source = "# 项目笔记\n\n正文示例。\n\n~~~js\nconst tint = 3;\n~~~\n\n~~~mermaid\nflowchart LR\nA --> B\n~~~";
-  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+  await files.getByLabel("选择 Markdown 或 ZIP 文件").setInputFiles({
     name: "主题验收.md", mimeType: "text/markdown", buffer: Buffer.from(source),
   });
   const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
@@ -575,7 +570,7 @@ test("在线版切换中英文后保留文档、撤销历史和浏览器偏好",
   const editSource = toolbar.getByRole("button", { name: "源码", exact: true });
   await editSource.click();
   const original = "# 保留标题\n\n中文和 English 正文。";
-  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+  await files.getByLabel("选择 Markdown 或 ZIP 文件").setInputFiles({
     name: "验收笔记.md", mimeType: "text/markdown", buffer: Buffer.from(original),
   });
   await expect(page.getByRole("heading", { name: "保留标题", exact: true })).toBeVisible();
@@ -639,7 +634,7 @@ test("完整的入门示例按语言切换并保留编辑和删除操作", async
   await expect(files.getByRole("button", { name: "入门示例.md", exact: true })).toBeVisible();
   await expect(files.getByRole("button", { name: "Getting started.md", exact: true })).toHaveAttribute("aria-current", "true");
   const download = page.waitForEvent("download");
-  await files.getByRole("button", { name: "Export", exact: true }).click();
+  await files.getByRole("button", { name: "Export Getting started.md", exact: true }).click();
   const exported = await download;
   expect(exported.suggestedFilename()).toBe("Getting started.md");
   const markdown = await readFile(await exported.path(), "utf8");
@@ -729,7 +724,7 @@ test("英文覆盖快捷键、主题、斜杠菜单和全屏内的编辑工具",
   await page.goto("./");
   const files = await fileManager(page);
   const document = "# 流程\n\n~~~mermaid\neventmodeling\ntf 01 evt Shop.Saved\n~~~\n\n~~~text\nplain example\n~~~\n\n结尾";
-  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+  await files.getByLabel("选择 Markdown 或 ZIP 文件").setInputFiles({
     name: "tools.md", mimeType: "text/markdown", buffer: Buffer.from(document),
   });
   const toolbar = await revealToolbar(page);
@@ -859,7 +854,7 @@ test("导入 SKILL.md 后高亮并编辑 YAML，刷新和导出保留文件头",
   ].join("\n");
   await page.goto("./");
   const files = await fileManager(page);
-  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+  await files.getByLabel("选择 Markdown 或 ZIP 文件").setInputFiles({
     name: "SKILL.md", mimeType: "text/markdown", buffer: Buffer.from("\uFEFF" + source.replace(/\n/g, "\r\n")),
   });
   const outline = await documentOutline(page);
@@ -898,7 +893,7 @@ test("导入 SKILL.md 后高亮并编辑 YAML，刷新和导出保留文件头",
   await expect(editor.locator(".cm-md-yaml-opener")).toBeVisible();
   await expect(editor.locator(".cm-line", { hasText: "author:" })).toBeVisible();
   const download = page.waitForEvent("download");
-  await files.getByRole("button", { name: "导出", exact: true }).click();
+  await files.getByRole("button", { name: "导出 SKILL.md", exact: true }).click();
   const exported = await download;
   expect(exported.suggestedFilename()).toBe("SKILL.md");
   expect(await readFile(await exported.path(), "utf8")).toBe(edited);
@@ -912,7 +907,7 @@ test("大纲识别实际标题，从正文和源码跳到长文档中的章节",
   ].join("\n");
   await page.goto("./");
   const files = await fileManager(page);
-  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+  await files.getByLabel("选择 Markdown 或 ZIP 文件").setInputFiles({
     name: "长文档.md", mimeType: "text/markdown", buffer: Buffer.from(source),
   });
   await documentOutline(page);
@@ -969,7 +964,7 @@ test("目录树沿用旧版文件库，创建子文件夹、移动同名文件�
   const meeting = await createLibraryFolder(files, "会议");
   const documents = meeting.locator("xpath=../..");
   await expect(project.locator("xpath=../..").getByRole("button", { name: "会议", exact: true })).toBeVisible();
-  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+  await files.getByLabel("选择 Markdown 或 ZIP 文件").setInputFiles({
     name: "记录.md", mimeType: "text/markdown", buffer: Buffer.from("刚导入的不同正文"),
   });
   await expect(editor).toHaveText("刚导入的不同正文");
@@ -1010,7 +1005,7 @@ test("目录树可拖入折叠文件夹或拖回根目录，原有子目录和�
   await root.click();
   const folder = await createLibraryFolder(files, "项目");
   const child = await createLibraryFolder(files, "周会");
-  await files.getByLabel("选择 Markdown 文件").setInputFiles({
+  await files.getByLabel("选择 Markdown 或 ZIP 文件").setInputFiles({
     name: "纪要.md", mimeType: "text/markdown", buffer: Buffer.from("子目录里的原文"),
   });
   const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
@@ -1053,7 +1048,7 @@ test("目录树同时展开多个分支，折叠保留当前文档，搜索打�
   const files = await fileManager(page);
   const root = files.getByRole("button", { name: "文件库", exact: true });
   const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
-  const notes = files.getByLabel("选择 Markdown 文件");
+  const notes = files.getByLabel("选择 Markdown 或 ZIP 文件");
   const project = await createLibraryFolder(files, "项目");
   const meeting = await createLibraryFolder(files, "周会");
   await notes.setInputFiles({ name: "纪要.md", mimeType: "text/markdown", buffer: Buffer.from("会议正文") });

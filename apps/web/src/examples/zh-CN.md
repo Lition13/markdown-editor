@@ -10,6 +10,7 @@
 | 切换正文和源码 | Ctrl+/ |
 | 插入表格 | Ctrl+Alt+T |
 | 显示或隐藏文件管理 | Ctrl+Alt+F |
+| 快速打开文件 | Ctrl+P |
 | 显示或隐藏文档大纲 | Ctrl+Alt+O |
 | 全屏编辑 | Alt+Enter |
 | 撤销和重做 | Ctrl+Z / Ctrl+Y |
