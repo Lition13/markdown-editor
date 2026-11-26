@@ -306,8 +306,12 @@ function Workspace({
 }
 
 function App() {
-  const [locale, setLocale] = useState<MarkdownLocale>(() => preference(localeKey) === "en" ? "en" : "zh-CN");
-  const library = useFileLibrary(locale);
+  const [preferredLocale, setPreferredLocale] = useState<MarkdownLocale | null>(() => {
+    const saved = preference(localeKey);
+    return saved === "en" || saved === "zh-CN" ? saved : null;
+  });
+  const locale = preferredLocale ?? "zh-CN";
+  const library = useFileLibrary(preferredLocale);
   const t = webTranslator(locale);
   const [appearance, setAppearance] = useState(readTheme);
   const [themeSettingsOpen, setThemeSettingsOpen] = useState(false);
@@ -336,7 +340,7 @@ function App() {
   }, [locale, t]);
 
   function changeLocale(next: MarkdownLocale) {
-    setLocale(next);
+    setPreferredLocale(next);
     savePreference(localeKey, next);
   }
 

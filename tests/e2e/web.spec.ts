@@ -497,7 +497,7 @@ test("在线版切换中英文后保留文档、撤销历史和浏览器偏好",
   const root = page.locator("html");
   await expect(root).toHaveAttribute("lang", "zh-CN");
   const files = await fileManager(page);
-  await expect(page.getByRole("heading", { name: "开始写作", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Getting started", exact: true })).toBeVisible();
   const toolbar = await revealToolbar(page);
   const editSource = toolbar.getByRole("button", { name: "源码", exact: true });
   await editSource.click();
@@ -545,7 +545,7 @@ test("在线版切换中英文后保留文档、撤销历史和浏览器偏好",
   await expect(page).toHaveTitle("Markdown 编辑器");
 });
 
-test("用英文界面打开并导出英文入门示例，编辑和删除后保留文件操作", async ({ page }) => {
+test("默认打开完整的英文示例，按语言切换并保留编辑和删除操作", async ({ page }) => {
   await page.goto("./");
   const files = await fileManager(page);
   const toolbar = await revealToolbar(page);
@@ -560,7 +560,8 @@ test("用英文界面打开并导出英文入门示例，编辑和删除后保�
     await toolbar.getByRole("combobox", { name: "Interface language", exact: true }).selectOption("zh-CN");
   }
 
-  await expect(chineseSample).toBeVisible();
+  await expect(englishSample).toBeVisible();
+  await expect(files.getByRole("button", { name: "Getting started.md", exact: true })).toHaveAttribute("aria-current", "true");
   await chooseEnglish();
   await expect(englishSample).toBeVisible();
   await expect(page.locator(".save-status")).toHaveText("Example document");
@@ -571,12 +572,19 @@ test("用英文界面打开并导出英文入门示例，编辑和删除后保�
   const exported = await download;
   expect(exported.suggestedFilename()).toBe("Getting started.md");
   const markdown = await readFile(await exported.path(), "utf8");
+  expect(markdown).toMatch(/^---\nname: markdown-quickstart\ndescription: .+\n---\n/);
   expect(markdown).toContain("| Insert a table | Ctrl+Alt+T |");
+  expect(markdown).toContain("## Lists and checkboxes");
+  expect(markdown).toContain("| :--- | :---: | ---: |");
+  expect(markdown).toContain("```javascript");
   expect(markdown).toContain("A[Import Markdown] --> B[Edit the document]");
+  expect(markdown).toContain("![Sketch of the workspace](workspace.png)");
+  expect(markdown).toContain("[^storage]:");
   expect(markdown).not.toMatch(/\p{Script=Han}/u);
 
   await chooseChinese();
   await expect(chineseSample).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "章节", exact: true }).getByRole("button", { name: "图片和脚注", exact: true })).toBeVisible();
   await chooseEnglish();
   await expect(englishSample).toBeVisible();
   await page.getByRole("button", { name: "Top toolbar", exact: true }).hover();
@@ -598,20 +606,41 @@ test("用英文界面打开并导出英文入门示例，编辑和删除后保�
   await expect(files.getByRole("button", { name: "Getting started.md", exact: true })).toHaveCount(0);
 });
 
-test("升级时为已选英文的浏览器补齐入门示例，保留同名个人文件", async ({ page }) => {
+test("旧默认示例升级后打开英文版，保留中文示例和同名个人文件", async ({ page }) => {
+  const previousExample = [
+    "# 开始写作", "", "点击正文任意位置开始编辑。输入 `/` 可以搜索格式、插入表格或切换到源码。", "",
+    "- [ ] 试试勾选待办", "- [ ] 导入自己的 Markdown 文件", "", "| 操作 | 快捷键 |", "| :--- | :--- |",
+    "| 切换正文和源码 | Ctrl+/ |", "| 插入表格 | Ctrl+Alt+T |", "| 全屏编辑 | Alt+Enter |", "",
+    "## 公式与图表", "", "$$", "\\sum_{k=1}^{n} k = \\frac{n(n+1)}{2}", "$$", "",
+    "```mermaid", "flowchart LR", "  A[导入 Markdown] --> B[编辑正文]", "  B --> C[导出文件]", "```", "",
+  ].join("\n");
+  const personal = "# Personal document\n\nThis file already existed.";
+  await page.route("**/markdown-editor/seed-starter", route => route.fulfill({ contentType: "text/html", body: "<!doctype html>" }));
+  await page.goto("./seed-starter");
+  await page.evaluate(({ previousExample, personal }) => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open("lition13-markdown-editor", 3);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      const files = db.createObjectStore("files", { keyPath: "id" });
+      files.add({ id: "example", name: "入门示例.md", revision: 0 });
+      files.add({ id: "personal", name: "Getting started.md", revision: 1 });
+      const contents = db.createObjectStore("contents");
+      contents.add(previousExample, "example");
+      contents.add(personal, "personal");
+      db.createObjectStore("folders", { keyPath: "id" });
+      db.createObjectStore("settings").add("example", "active-file");
+    };
+    request.onsuccess = () => { request.result.close(); resolve(); };
+    request.onerror = () => reject(request.error);
+  }), { previousExample, personal });
+
   await page.goto("./");
   const files = await fileManager(page);
-  const personal = "# Personal document\n\nThis file already existed.";
-  await files.getByLabel("选择 Markdown 文件").setInputFiles({
-    name: "Getting started.md", mimeType: "text/markdown", buffer: Buffer.from(personal),
-  });
-  await expect(page.getByRole("heading", { name: "Personal document", exact: true })).toBeVisible();
-  await files.getByRole("button", { name: "入门示例.md", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "开始写作", exact: true })).toBeVisible();
-  await page.evaluate(() => localStorage.setItem("lition13-markdown-editor-locale", "en"));
-  await page.reload();
   await expect(page.getByRole("heading", { name: "Getting started", exact: true })).toBeVisible();
   await expect(files.getByRole("button", { name: "Getting started (2).md", exact: true })).toHaveAttribute("aria-current", "true");
+  await files.getByRole("button", { name: "入门示例.md", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "开始写作", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "章节", exact: true }).getByRole("button", { name: "代码和 YAML", exact: true })).toBeVisible();
   await files.getByRole("button", { name: "Getting started.md", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Personal document", exact: true })).toBeVisible();
   await page.reload();
@@ -994,7 +1023,8 @@ test("Pages 子路径通过站内资源渲染公式和 Mermaid", async ({ page, 
   );
   await page.goto("./");
   const document = page.locator(".notes-live-document");
-  await expect(document.getByRole("table")).toBeVisible();
+  await expect(document.getByRole("table").filter({ hasText: "Insert a table" })).toBeVisible();
+  await page.getByRole("navigation", { name: "章节", exact: true }).getByRole("button", { name: "Math and diagrams", exact: true }).click();
   await expect(document.locator(".katex").first()).toBeVisible();
   await localFont;
   await expect(document.locator(".mermaid-canvas svg")).toBeVisible({ timeout: 30_000 });

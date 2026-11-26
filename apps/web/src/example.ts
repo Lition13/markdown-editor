@@ -1,4 +1,8 @@
-export const example = {
+import english from "./examples/en.md?raw";
+import chinese from "./examples/zh-CN.md?raw";
+
+// Match the original, unedited samples so existing libraries can show the newer guide.
+const previousChineseExample = {
   name: "入门示例.md",
   value: [
     "# 开始写作",
@@ -29,7 +33,7 @@ export const example = {
   ].join("\n"),
 };
 
-export const englishExample = {
+const previousEnglishExample = {
   name: "Getting started.md",
   value: [
     "# Getting started",
@@ -58,4 +62,13 @@ export const englishExample = {
     "```",
     "",
   ].join("\n"),
+};
+
+export const example = { name: previousChineseExample.name, value: chinese.replace(/\r\n?/g, "\n") };
+export const englishExample = { name: previousEnglishExample.name, value: english.replace(/\r\n?/g, "\n") };
+
+export const previousExampleValues = {
+  "zh-CN": new Set(["Ctrl+Alt+T", "Ctrl+T", "Ctrl+Shift+Enter"].map(key =>
+    previousChineseExample.value.replace("| 插入表格 | Ctrl+Alt+T |", `| 插入表格 | ${key} |`))),
+  en: new Set([previousEnglishExample.value]),
 };

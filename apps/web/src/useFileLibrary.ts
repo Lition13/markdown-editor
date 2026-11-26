@@ -1,7 +1,7 @@
 import type { MarkdownLocale } from "@lition13/markdown-editor";
 import { useEffect, useRef, useState } from "react";
 import {
-  addFiles, addFolder, createEnglishExample, exampleFile, exampleIds, FileLibraryError, fileEntry, folderRemoval, isOriginalExample,
+  addFiles, addFolder, exampleFiles, FileLibraryError, fileEntry, folderRemoval, isOriginalExample,
   movedFile, movedFolder, moveFile, moveFolder, newFiles, newFolder,
   openFile, readLibrary, removeFile, removeFolder, renamedFile, renamedFolder, renameFile, renameFolder,
   saveContent, sortByName, syncExampleLanguage, type FileEntry, type FileInput, type FolderEntry, type MarkdownFile,
@@ -14,7 +14,7 @@ interface PendingEdit {
   saving: boolean;
 }
 
-export function useFileLibrary(locale: MarkdownLocale) {
+export function useFileLibrary(preferredLocale: MarkdownLocale | null) {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [folders, setFolders] = useState<FolderEntry[]>([]);
   const [current, setCurrent] = useState<MarkdownFile | null>(null);
@@ -23,12 +23,12 @@ export function useFileLibrary(locale: MarkdownLocale) {
   const [progress, setProgress] = useState<Partial<Record<string, WebMessage | null>>>({});
   const active = useRef<MarkdownFile | null>(null);
   const memory = useRef<Map<string, string> | null>(null);
-  const memoryEnglishExampleAdded = useRef(false);
   const pending = useRef(new Map<string, PendingEdit>());
-  const currentLocale = useRef(locale);
-  const previousLocale = useRef<MarkdownLocale | undefined>(undefined);
+  const initialLocale = useRef(preferredLocale);
+  const currentLocale = useRef(preferredLocale);
+  const previousLocale = useRef(preferredLocale);
   const exampleQueue = useRef(Promise.resolve());
-  currentLocale.current = locale;
+  currentLocale.current = preferredLocale;
 
   function show(file: MarkdownFile | null) {
     active.current = file;
@@ -42,17 +42,18 @@ export function useFileLibrary(locale: MarkdownLocale) {
 
   useEffect(() => {
     let mounted = true;
-    void readLibrary().then(library => {
+    void readLibrary(initialLocale.current).then(library => {
       if (!mounted) return;
       setFiles(library.files);
       setFolders(library.folders);
       show(library.current);
     }).catch(() => {
       if (!mounted) return;
-      memory.current = new Map([[exampleFile.id, exampleFile.value]]);
+      const examples = Object.values(exampleFiles);
+      memory.current = new Map(examples.map(file => [file.id, file.value]));
       setSessionOnly(true);
-      setFiles([fileEntry(exampleFile)]);
-      show(exampleFile);
+      setFiles(sortByName(examples.map(fileEntry)));
+      show(exampleFiles[initialLocale.current ?? "en"]);
     }).finally(() => {
       if (mounted) setReady(true);
     });
@@ -60,13 +61,12 @@ export function useFileLibrary(locale: MarkdownLocale) {
   }, []);
 
   useEffect(() => {
-    if (!ready || previousLocale.current === locale) return;
-    const openExisting = previousLocale.current !== undefined;
-    previousLocale.current = locale;
-    if (!openExisting && locale === "zh-CN") return;
+    if (!ready || previousLocale.current === preferredLocale) return;
+    previousLocale.current = preferredLocale;
+    const locale = preferredLocale ?? "en";
 
     function source() {
-      if (currentLocale.current !== locale) return;
+      if (currentLocale.current !== preferredLocale) return;
       const file = active.current;
       if (file && (!isOriginalExample(file) || pending.current.has(file.id))) return;
       return file;
@@ -74,14 +74,7 @@ export function useFileLibrary(locale: MarkdownLocale) {
 
     const content = memory.current;
     if (content) {
-      let target = files.find(file => file.id === exampleIds[locale]);
-      if (!target && locale === "en" && !memoryEnglishExampleAdded.current) {
-        const example = createEnglishExample(files);
-        memoryEnglishExampleAdded.current = true;
-        content.set(example.id, example.value);
-        target = fileEntry(example);
-        setFiles(previous => sortByName([...previous, fileEntry(example)]));
-      }
+      const target = files.find(file => file.id === exampleFiles[locale].id);
       if (!target) return;
       const from = source();
       const file = { ...target, value: content.get(target.id) ?? "" };
@@ -90,14 +83,14 @@ export function useFileLibrary(locale: MarkdownLocale) {
     }
 
     exampleQueue.current = exampleQueue.current.then(async () => {
-      if (currentLocale.current !== locale) return;
-      const { entry, selection } = await syncExampleLanguage(locale, openExisting, source);
+      if (currentLocale.current !== preferredLocale) return;
+      const { entry, selection } = await syncExampleLanguage(locale, source);
       if (entry) {
         setFiles(previous => sortByName([...previous.filter(file => file.id !== entry.id), entry]));
       }
       if (selection && active.current === selection.from) show(selection.target);
     }).catch(() => {});
-  }, [files, locale, ready]);
+  }, [files, preferredLocale, ready]);
 
   function markSave(id: string, state: WebMessage | null | undefined) {
     setProgress(previous => {

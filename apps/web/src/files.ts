@@ -1,5 +1,5 @@
 import type { MarkdownLocale } from "@lition13/markdown-editor";
-import { englishExample, example } from "./example";
+import { englishExample, example, previousExampleValues } from "./example";
 import type { WebMessage } from "./locale";
 
 export class FileLibraryError extends Error {
@@ -42,11 +42,12 @@ const englishExampleKey = "english-example-added";
 const nameOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 let connection: Promise<IDBDatabase> | undefined;
 
-export const exampleFile: MarkdownFile = { id: "example", revision: 0, ...example };
+const exampleFile: MarkdownFile = { id: "example", revision: 0, ...example };
 const englishExampleFile: MarkdownFile = { id: "example-en", revision: 0, ...englishExample };
-export const exampleIds: Record<MarkdownLocale, string> = { "zh-CN": exampleFile.id, en: englishExampleFile.id };
-const previousExamples = new Set(["Ctrl+T", "Ctrl+Shift+Enter"].map(key =>
-  example.value.replace("| 插入表格 | Ctrl+Alt+T |", `| 插入表格 | ${key} |`)));
+export const exampleFiles: Record<MarkdownLocale, MarkdownFile> = { "zh-CN": exampleFile, en: englishExampleFile };
+const previousExamples = new Map([
+  [exampleFile.id, previousExampleValues["zh-CN"]], [englishExampleFile.id, previousExampleValues.en],
+]);
 const nameKey = (name: string) => name.normalize("NFC").toLowerCase();
 
 export function fileEntry({ id, name, revision, folderId, exampleName }: FileEntry): FileEntry {
@@ -88,15 +89,19 @@ function namesInFolder(files: FileEntry[], folderId: string | null) {
   return new Set(files.filter(file => (file.folderId ?? null) === folderId).map(file => nameKey(file.name)));
 }
 
-export function createEnglishExample(files: FileEntry[]): MarkdownFile {
+function createEnglishExample(files: FileEntry[]): MarkdownFile {
   const name = reserveFileName(englishExampleFile.name, namesInFolder(files, null));
   return { ...englishExampleFile, name, exampleName: name };
 }
 
-export function isOriginalExample(file: MarkdownFile | null) {
-  if (!file || file.revision !== 0 || file.folderId != null) return false;
+function originalExample(file: FileEntry) {
+  if (file.revision !== 0 || file.folderId != null) return;
   const original = file.id === exampleFile.id ? exampleFile : file.id === englishExampleFile.id ? englishExampleFile : undefined;
-  return !!original && file.name === (file.exampleName ?? original.name) && file.value === original.value;
+  if (original && file.name === (file.exampleName ?? original.name)) return original;
+}
+
+export function isOriginalExample(file: MarkdownFile | null) {
+  return !!file && originalExample(file)?.value === file.value;
 }
 
 export function newFiles(inputs: FileInput[], existing: FileEntry[], folderId: string | null): MarkdownFile[] {
@@ -178,7 +183,7 @@ function putFile(transaction: IDBTransaction, file: MarkdownFile) {
   transaction.objectStore(textStore).add(file.value, file.id);
 }
 
-function database() {
+function database(starterLocale: MarkdownLocale) {
   if (connection) return connection;
   const opening = new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open("lition13-markdown-editor", 3);
@@ -191,9 +196,10 @@ function database() {
       db.createObjectStore(filesStore, { keyPath: "id" });
       db.createObjectStore(textStore);
       const settings = db.createObjectStore(settingsStore);
-      const seed = (file: MarkdownFile) => {
-        putFile(transaction, file);
-        settings.add(file.id, activeKey);
+      const seedExamples = () => {
+        for (const file of Object.values(exampleFiles)) putFile(transaction, file);
+        settings.add(exampleFiles[starterLocale].id, activeKey);
+        settings.add(true, englishExampleKey);
       };
       if (db.objectStoreNames.contains("drafts")) {
         const drafts = transaction.objectStore("drafts");
@@ -201,14 +207,16 @@ function database() {
         previous.onsuccess = () => {
           const draft = previous.result as Partial<FileInput> | undefined;
           if (typeof draft?.name === "string" && typeof draft.value === "string") {
-            seed({ id: "legacy-draft", name: draft.name, value: draft.value, revision: 0 });
+            const restored = { id: "legacy-draft", name: draft.name, value: draft.value, revision: 0 };
+            putFile(transaction, restored);
+            settings.add(restored.id, activeKey);
             drafts.delete("current");
           } else {
-            seed(exampleFile);
+            seedExamples();
           }
         };
       } else {
-        seed(exampleFile);
+        seedExamples();
       }
     };
     request.onerror = () => reject(request.error);
@@ -243,8 +251,8 @@ function read<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
-async function transaction<T>(mode: IDBTransactionMode, action: (tx: IDBTransaction) => T | Promise<T>): Promise<T> {
-  const db = await database();
+async function transaction<T>(mode: IDBTransactionMode, action: (tx: IDBTransaction) => T | Promise<T>, starterLocale: MarkdownLocale = "en"): Promise<T> {
+  const db = await database(starterLocale);
   const tx = db.transaction([filesStore, textStore, settingsStore, foldersStore], mode);
   const done = new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve();
@@ -263,42 +271,52 @@ async function transaction<T>(mode: IDBTransactionMode, action: (tx: IDBTransact
 async function withText(tx: IDBTransaction, entry: FileEntry): Promise<MarkdownFile> {
   const value = await read<string | undefined>(tx.objectStore(textStore).get(entry.id));
   if (value === undefined) throw new FileLibraryError("无法读取此文件的内容。");
-  const unchangedExample = entry.id === exampleFile.id && entry.name === exampleFile.name
-    && entry.revision === 0 && previousExamples.has(value);
-  return { ...entry, value: unchangedExample ? example.value : value };
+  const original = originalExample(entry);
+  return { ...entry, value: original && previousExamples.get(entry.id)?.has(value) ? original.value : value };
 }
 
-export function readLibrary(): Promise<FileLibrary> {
-  return transaction("readonly", async tx => {
+async function addEnglishExample(tx: IDBTransaction, entries: FileEntry[]) {
+  const settings = tx.objectStore(settingsStore);
+  if (entries.some(file => file.id === englishExampleFile.id) || await read(settings.get(englishExampleKey))) return;
+  const added = createEnglishExample(entries);
+  putFile(tx, added);
+  settings.put(true, englishExampleKey);
+  return added;
+}
+
+export function readLibrary(preferredLocale: MarkdownLocale | null): Promise<FileLibrary> {
+  return transaction("readwrite", async tx => {
+    const settings = tx.objectStore(settingsStore);
     const [entries, folders, active] = await Promise.all([
       read<FileEntry[]>(tx.objectStore(filesStore).getAll()),
       read<FolderEntry[]>(tx.objectStore(foldersStore).getAll()),
-      read<string | undefined>(tx.objectStore(settingsStore).get(activeKey)),
+      read<string | undefined>(settings.get(activeKey)),
     ]);
     const files = sortByName(entries);
     const entry = files.find(file => file.id === active) ?? files[0];
-    return { files, folders: sortByName(folders), current: entry ? await withText(tx, entry) : null };
-  });
+    let current = entry ? await withText(tx, entry) : null;
+    const added = preferredLocale === "en" || files.some(file => file.id === exampleFile.id)
+      ? await addEnglishExample(tx, files) : undefined;
+    if (added && preferredLocale !== "zh-CN" && (!current || isOriginalExample(current))) {
+      current = added;
+      settings.put(added.id, activeKey);
+    }
+    return { files: added ? sortByName([...files, fileEntry(added)]) : files, folders: sortByName(folders), current };
+  }, preferredLocale ?? "en");
 }
 
 // The source callback sees the current tab's document and any pending edits.
 // undefined means the language change should leave the current selection alone.
-export function syncExampleLanguage(locale: MarkdownLocale, openExisting: boolean, source: () => MarkdownFile | null | undefined) {
+export function syncExampleLanguage(locale: MarkdownLocale, source: () => MarkdownFile | null | undefined) {
   return transaction("readwrite", async tx => {
     const settings = tx.objectStore(settingsStore);
     const entries = await read<FileEntry[]>(tx.objectStore(filesStore).getAll());
-    let entry = entries.find(file => file.id === exampleIds[locale]);
-    let added: MarkdownFile | undefined;
-    if (locale === "en" && !entry && !await read(settings.get(englishExampleKey))) {
-      added = createEnglishExample(entries);
-      putFile(tx, added);
-      settings.put(true, englishExampleKey);
-      entry = fileEntry(added);
-    }
+    const existing = entries.find(file => file.id === exampleFiles[locale].id);
+    const added = locale === "en" && !existing ? await addEnglishExample(tx, entries) : undefined;
+    const entry = added ? fileEntry(added) : existing;
 
     const from = source();
     if (!entry || from === undefined || from?.id === entry.id) return { entry };
-    if (!added && !openExisting && await read(settings.get(activeKey)) !== entry.id) return { entry };
     const target = added ?? await withText(tx, entry);
     if (!isOriginalExample(target)) return { entry };
     if (from) {
