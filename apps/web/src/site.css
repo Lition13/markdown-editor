@@ -616,8 +616,6 @@ dialog.side-panel::backdrop { background: #101a3278; }
 
 @media (max-width: 530px) {
   .workbench-toolbar { gap: 4px; padding-inline: 7px; }
-  .workbench-toolbar .tool-label { display: none; }
-  .workbench-toolbar .panel-toggle:not(.icon-control) { min-width: 34px; padding-inline: 5px; }
   .workbench-toolbar .icon-control { width: 32px; }
   .workbench-toolbar .language-trigger { padding-inline: 0; }
   .language-label, .language-chevron { display: none; }
@@ -629,7 +627,6 @@ dialog.side-panel::backdrop { background: #101a3278; }
 }
 @media (max-width: 380px) {
   .workbench-toolbar { gap: 3px; padding-inline: 5px; }
-  .workbench-toolbar .panel-toggle:not(.icon-control) { min-width: 30px; padding-inline: 4px; }
   .workbench-toolbar .icon-control { width: 28px; }
   .workbench-toolbar .document-name { display: none; }
 }
@@ -639,6 +636,6 @@ dialog.side-panel::backdrop { background: #101a3278; }
 @media (hover: none) and (pointer: coarse) {
   :root { --toolbar-edge: 34px; --toolbar-row: 50px; }
   .toolbar-handle-label { display: inline; }
-  .workbench-toolbar .panel-toggle, .workbench-toolbar .icon-control, .view-options button { min-height: 36px; }
+  .workbench-toolbar .icon-control, .view-options button { min-height: 36px; }
   .file-kind-icon { width: 28px; }
 }

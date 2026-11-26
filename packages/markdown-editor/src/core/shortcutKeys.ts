@@ -1,5 +1,5 @@
 import { shortcutFromEvent } from "./keyboard";
-import { markdownTranslator, type MarkdownMessage } from "./locale";
+import { markdownTranslator, type MarkdownLocale, type MarkdownMessage } from "./locale";
 
 export const editorShortcutPrefix = "Ctrl+Shift+.";
 export const shortcutSequenceStart = editorShortcutPrefix + " → ";
@@ -67,6 +67,13 @@ export type MarkdownShortcutIssue = {
   kind: "invalid" | "duplicate" | "reserved" | "warning";
   message: string;
 };
+
+export function checkMarkdownShortcutKey(input: string, locale?: MarkdownLocale): MarkdownShortcutIssue | undefined {
+  const t = markdownTranslator(locale);
+  const binding = normalizeMarkdownShortcut(input);
+  if (!binding) return { kind: "invalid", message: t("请输入有效的快捷键，例如 Ctrl+Shift+Enter。") };
+  return keyIssue(binding, t);
+}
 
 // Browser shortcut references are listed in the project README.
 const browserReserved = new Map<string, MarkdownMessage>([

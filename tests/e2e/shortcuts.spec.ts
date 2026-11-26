@@ -152,3 +152,72 @@ test("快捷键设置支持录制双段键，表格与正文可共用不同作�
   await expect(dialog.getByRole("button", { name: "修改 插入表格", exact: true })).toContainText("Ctrl+Alt+T");
   await expect(dialog.getByRole("button", { name: "修改 Markdown 语法帮助", exact: true })).toContainText("Ctrl+Shift+/");
 });
+
+test("大纲快捷键可在顶栏收起时切换，检测冲突并记住修改", async ({ page }) => {
+  await page.goto("./");
+  await expect(notes(page)).toBeVisible();
+  const outline = page.locator("#document-outline");
+  await expect(outline).toBeHidden();
+  await expect(page.locator("#workbench-toolbar")).toBeHidden();
+  await page.keyboard.press("Control+Alt+o");
+  await expect(outline).toBeVisible();
+  await notes(page).press("Control+Alt+o");
+  await expect(outline).toBeHidden();
+  await expect(notes(page)).toBeFocused();
+
+  const settings = await openSettings(page);
+  const table = await editShortcut(settings, "插入表格");
+  await table.getByRole("textbox", { name: "快捷键组合", exact: true }).fill("Ctrl+Alt+O");
+  await expect(table.getByRole("alert")).toHaveText("与「切换文档大纲」的快捷键冲突。");
+  const form = await editShortcut(settings, "切换文档大纲");
+  const input = form.getByRole("textbox", { name: "快捷键组合", exact: true });
+  const save = form.getByRole("button", { name: "保存", exact: true });
+  await expect(input).toHaveValue("Ctrl+Alt+O");
+  await input.fill("Ctrl+Shift+Z");
+  await expect(form.getByRole("alert")).toHaveText("与「重做」的快捷键冲突。");
+  await expect(save).toBeDisabled();
+  await input.fill("Ctrl+T");
+  await expect(form.getByRole("alert")).toContainText("浏览器保留此快捷键，用于新建标签页");
+  const record = form.getByRole("button", { name: "录制", exact: true });
+  await record.click();
+  await page.keyboard.press("Control+Alt+o");
+  await expect(input).toHaveValue("Ctrl+Alt+O");
+  await expect(outline).toBeHidden();
+  await record.click();
+  await page.keyboard.press("Control+Shift+F9");
+  await expect(input).toHaveValue("Ctrl+Shift+F9");
+  await save.click();
+  await closeSettings(settings);
+  await notes(page).press("Control+Alt+o");
+  await expect(outline).toBeHidden();
+  await notes(page).press("Control+Shift+F9");
+  await expect(outline).toBeVisible();
+  await expect(notes(page)).toBeFocused();
+
+  await page.reload();
+  await expect(outline).toBeVisible();
+  await page.keyboard.press("Control+Shift+F9");
+  await expect(outline).toBeHidden();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator("dialog#document-outline")).toBeAttached();
+  await page.keyboard.press("Control+Shift+F9");
+  await expect(outline).toHaveAttribute("open", "");
+  await page.keyboard.press("Control+Shift+F9");
+  await expect(outline).toBeHidden();
+});
+
+test("升级后保留占用大纲默认键的旧快捷键", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("lition13-markdown-editor-shortcuts", JSON.stringify({ link: "Ctrl+Alt+O" })));
+  await page.goto("./");
+  await notes(page).press("Control+Alt+o");
+  const link = page.getByRole("dialog", { name: "插入描述链接", exact: true });
+  await expect(link).toBeVisible();
+  await expect(page.locator("#document-outline")).toBeHidden();
+  await page.keyboard.press("Escape");
+  await expect(link).toBeHidden();
+  const settings = await openSettings(page);
+  const form = await editShortcut(settings, "切换文档大纲");
+  await expect(settings.getByRole("button", { name: "修改 切换文档大纲", exact: true })).toContainText("已停用");
+  await form.getByRole("button", { name: "恢复默认", exact: true }).click();
+  await expect(form.getByRole("alert")).toHaveText("与「插入链接」的快捷键冲突。");
+});

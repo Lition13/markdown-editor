@@ -24,6 +24,7 @@ A new file library opens **Getting started.md** by default. The example walks th
 | Switch between formatted editing and source | Ctrl+/ |
 | Insert a table | Ctrl+Alt+T |
 | Enter fullscreen editing | Alt+Enter |
+| Show or hide the document outline | Ctrl+Alt+O |
 | Undo or redo | Ctrl+Z / Ctrl+Y |
 | Exit fullscreen editing | Esc |
 

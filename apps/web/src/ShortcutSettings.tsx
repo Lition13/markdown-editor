@@ -1,10 +1,12 @@
 import {
-  checkMarkdownShortcut, editorShortcutPrefix, getMarkdownShortcutCommands, markdownShortcutFromEvent, normalizeMarkdownShortcut,
-  type MarkdownShortcutDefinition, type MarkdownShortcutIssue, type MarkdownShortcutOverrides,
+  editorShortcutPrefix, markdownShortcutFromEvent, normalizeMarkdownShortcut, type MarkdownShortcutIssue,
 } from "@lition13/markdown-editor";
 import { PencilLine, Search, X } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useWebLocale, webTranslator } from "./locale";
+import {
+  checkWorkbenchShortcut, getWorkbenchShortcutCommands, type WorkbenchShortcutDefinition, type WorkbenchShortcutOverrides,
+} from "./workbenchShortcuts";
 import "./shortcutSettings.css";
 
 const fixedShortcuts = [
@@ -16,21 +18,21 @@ const fixedShortcuts = [
 ] as const;
 
 export default function ShortcutSettings({ value, onChange, onClose, storageFailed }: {
-  value: MarkdownShortcutOverrides;
-  onChange: (next: MarkdownShortcutOverrides) => void;
+  value: WorkbenchShortcutOverrides;
+  onChange: (next: WorkbenchShortcutOverrides) => void;
   onClose: () => void;
   storageFailed: boolean;
 }) {
   const locale = useWebLocale();
   const t = webTranslator(locale);
-  const actions = useMemo(() => getMarkdownShortcutCommands(locale), [locale]);
+  const actions = useMemo(() => getWorkbenchShortcutCommands(locale), [locale]);
   const groups = [...new Set(actions.map(command => command.group))];
   const dialog = useRef<HTMLDialogElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const previousButton = useRef<HTMLButtonElement | null>(null);
   const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<MarkdownShortcutDefinition | null>(null);
+  const [editing, setEditing] = useState<WorkbenchShortcutDefinition | null>(null);
   const [draft, setDraft] = useState("");
   const [capture, setCapture] = useState<"first" | "second" | null>(null);
   const [restoreIssue, setRestoreIssue] = useState<MarkdownShortcutIssue>();
@@ -50,7 +52,7 @@ export default function ShortcutSettings({ value, onChange, onClose, storageFail
   const commands = actions.filter(command => matches(command.label, command.group, command.key, value[command.id],
     ...(value[command.id] === undefined ? (command.aliases ?? []).map(alias => alias.key) : [])));
   const fixed = fixedShortcuts.filter(item => matches(t(item.label), item.key, t("固定操作")));
-  const typedIssue = editing && draft.trim() ? checkMarkdownShortcut(editing.id, draft, value, locale) : undefined;
+  const typedIssue = editing && draft.trim() ? checkWorkbenchShortcut(editing.id, draft, value, locale) : undefined;
   const issue = restoreIssue ?? typedIssue;
   const canSave = !!draft.trim() && (!typedIssue || typedIssue.kind === "warning");
 
@@ -66,7 +68,7 @@ export default function ShortcutSettings({ value, onChange, onClose, storageFail
     setRestoreIssue(undefined);
   }
 
-  function startEdit(command: MarkdownShortcutDefinition, button: HTMLButtonElement, binding: string | null) {
+  function startEdit(command: WorkbenchShortcutDefinition, button: HTMLButtonElement, binding: string | null) {
     if (editing?.id === command.id) {
       finishEdit();
       return;
@@ -79,7 +81,7 @@ export default function ShortcutSettings({ value, onChange, onClose, storageFail
 
   function save(binding: string | null | undefined) {
     if (!editing) return;
-    const warning = checkMarkdownShortcut(editing.id, binding, value, locale);
+    const warning = checkWorkbenchShortcut(editing.id, binding, value, locale);
     if (warning && warning.kind !== "warning") {
       setRestoreIssue(warning);
       return;
@@ -105,7 +107,7 @@ export default function ShortcutSettings({ value, onChange, onClose, storageFail
     if (!chord) return;
     event.preventDefault();
     event.stopPropagation();
-    if (chord === editorShortcutPrefix) {
+    if (chord === editorShortcutPrefix && editing?.id !== "outline") {
       setCapture("second");
       return;
     }
@@ -115,7 +117,7 @@ export default function ShortcutSettings({ value, onChange, onClose, storageFail
     setCapture(null);
   }
 
-  function editForm(command: MarkdownShortcutDefinition) {
+  function editForm(command: WorkbenchShortcutDefinition) {
     return <form className="shortcut-form" aria-label={t("设置 {command}", { command: command.label })} onSubmit={event => {
       event.preventDefault();
       const binding = canSave && normalizeMarkdownShortcut(draft);
@@ -134,7 +136,9 @@ export default function ShortcutSettings({ value, onChange, onClose, storageFail
       </div>
       {issue ? <p id="shortcut-conflict" className="shortcut-issue" data-kind={issue.kind} role={issue.kind === "warning" ? "status" : "alert"}>
         {issue.message}
-      </p> : <p id="shortcut-input-hint" className="shortcut-hint">{t("可录制或手动输入。带 → 的组合先按 {prefix}，松开后再按第二个键。", { prefix: editorShortcutPrefix })}</p>}
+      </p> : <p id="shortcut-input-hint" className="shortcut-hint">{command.id === "outline"
+        ? t("大纲快捷键使用一组按键，例如 Ctrl+Alt+O。")
+        : t("可录制或手动输入。带 → 的组合先按 {prefix}，松开后再按第二个键。", { prefix: editorShortcutPrefix })}</p>}
       <div className="shortcut-actions">
         <button className="button" type="button" disabled={value[command.id] === undefined} onClick={() => save(undefined)}>{t("恢复默认")}</button>
         <button className="button" type="button" disabled={value[command.id] === null} onClick={() => save(null)}>{t("停用")}</button>

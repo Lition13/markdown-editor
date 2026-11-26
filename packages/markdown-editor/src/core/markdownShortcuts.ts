@@ -75,6 +75,10 @@ function bindings(definition: ShortcutDefinition, override?: string | null): rea
   return [{ key: definition.key }, ...(definition.aliases ?? [])];
 }
 
+export function getMarkdownShortcutBindings(action: MarkdownShortcutAction, override?: string | null) {
+  return bindings(definitions[action], override).map(binding => binding.key);
+}
+
 function findConflict(action: MarkdownShortcutAction, binding: string | null | undefined, overrides: MarkdownShortcutOverrides) {
   const definition: ShortcutDefinition = definitions[action];
   const keys = bindings(definition, binding).map(item => item.key);

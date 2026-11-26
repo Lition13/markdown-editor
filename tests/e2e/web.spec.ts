@@ -308,10 +308,11 @@ test("工作台默认隐藏面板，图标按钮可切换视图和状态栏", as
   await handle.hover();
   await expect(toolbar).toBeVisible();
   await expect(toolbar.getByRole("button", { name: "全屏编辑", exact: true })).toHaveCount(0);
+  const filesButton = toolbar.getByRole("button", { name: "文件管理", exact: true });
   const edit = toolbar.getByRole("button", { name: "编辑", exact: true });
   const source = toolbar.getByRole("button", { name: "源码", exact: true });
   const outline = toolbar.getByRole("button", { name: "文档大纲", exact: true });
-  for (const button of [edit, source, outline, status]) {
+  for (const button of [filesButton, edit, source, outline, status]) {
     await expect(button).toHaveText("");
     await expect(button.locator("svg")).toBeVisible();
     await expect(button).toHaveAttribute("title", /.+/);
