@@ -44,13 +44,8 @@ function savePreference(key: string, value: string) {
   }
 }
 
-function useVisibility(key: string, defaultVisible = true) {
-  const [visible, setVisible] = useState(() => {
-    const value = preference(key);
-    if (value === "visible") return true;
-    if (value === "hidden") return false;
-    return defaultVisible;
-  });
+function useVisibility(key: string) {
+  const [visible, setVisible] = useState(() => preference(key) === "visible");
   useLayoutEffect(() => {
     savePreference(key, visible ? "visible" : "hidden");
   }, [key, visible]);
@@ -81,7 +76,7 @@ function useCompactLayout() {
 function Toolbar({ children, onLocaleChange }: { children: ReactNode; onLocaleChange: (locale: MarkdownLocale) => void }) {
   const t = useWebText();
   const [hovered, setHovered] = useState(false);
-  const [held, setHeld] = useVisibility(toolbarKey, false);
+  const [held, setHeld] = useVisibility(toolbarKey);
   const [keyboard, setKeyboard] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
   const handle = useRef<HTMLButtonElement>(null);
@@ -207,10 +202,10 @@ function Workspace({
           <>
             <div className="view-options" role="group" aria-label={t("文档视图")}>
               <button type="button" aria-label={t("编辑")} title={t("编辑")} aria-pressed={mode === "live"} onClick={() => setMode("live")}>
-                <PencilLine size={15} aria-hidden="true" /><span className="view-label">{t("编辑")}</span>
+                <PencilLine size={16} aria-hidden="true" />
               </button>
               <button type="button" aria-label={t("源码")} title={t("源码")} aria-pressed={mode === "source"} onClick={() => setMode("source")}>
-                <CodeXml size={16} aria-hidden="true" /><span className="view-label">{t("源码")}</span>
+                <CodeXml size={16} aria-hidden="true" />
               </button>
             </div>
             <button type="button" className="icon-control" aria-label={t("全屏编辑")} title={t("全屏编辑")} aria-haspopup="dialog"
@@ -219,15 +214,15 @@ function Workspace({
             </button>
           </>
         )}
-        <button type="button" className="button panel-toggle" aria-label={t("文档大纲")} title={t("文档大纲")}
+        <button type="button" className="button icon-control panel-toggle" aria-label={t("文档大纲")} title={t("文档大纲")}
           aria-haspopup={compact ? "dialog" : undefined} aria-controls="document-outline" aria-expanded={outlineOpen}
           onClick={toggleOutline}>
-          <ListTree size={16} aria-hidden="true" /><span className="tool-label">{t("大纲")}</span>
+          <ListTree size={16} aria-hidden="true" />
         </button>
-        <button type="button" className="button panel-toggle" aria-label={t("状态栏")}
+        <button type="button" className="button icon-control panel-toggle" aria-label={t("状态栏")}
           title={statusOpen ? t("隐藏状态栏") : t("显示状态栏")} aria-controls="workspace-status" aria-pressed={statusOpen}
           onClick={toggleStatus}>
-          <PanelBottom size={16} aria-hidden="true" /><span className="tool-label">{t("状态栏")}</span>
+          <PanelBottom size={16} aria-hidden="true" />
         </button>
         <button type="button" className="icon-control" aria-label={t("快捷键设置")} title={t("快捷键设置")} aria-haspopup="dialog" onClick={showShortcuts}>
           <Keyboard size={18} aria-hidden="true" />

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { chooseInterfaceLanguage, fileManager, revealToolbar } from "./workbench";
+import { chooseInterfaceLanguage, documentOutline, fileManager, revealToolbar } from "./workbench";
 
 async function beginLibraryDrag(page: Page, source: Locator) {
   await expect(source).toBeVisible();
@@ -288,43 +288,54 @@ test("两个标签页编辑同一文件时保留已保存内容，并可导出�
   await expect(second.getByRole("textbox", editor)).toHaveText("先保存的版本");
 });
 
-test("工作台铺满窗口，顶栏悬浮，字词和行数实时更新并记住状态栏偏好", async ({ page }) => {
+test("工作台默认隐藏面板，图标按钮可切换视图和状态栏", async ({ page }) => {
   await page.goto("./");
   const toolbar = page.locator("#workbench-toolbar");
   const handle = page.getByRole("button", { name: "顶部工具栏" });
   const footer = page.locator("#workspace-status");
+  const status = toolbar.getByRole("button", { name: "状态栏", exact: true });
   await page.mouse.move(550, 180);
-  await expect(page.getByRole("complementary", { name: "文件管理" })).toBeVisible();
-  await expect(page.getByRole("complementary", { name: "文件管理" }).getByText("文件保存在此浏览器")).toHaveCount(0);
-  await expect(page.getByRole("complementary", { name: "文档大纲" })).toBeVisible();
+  await expect(page.locator("#file-manager")).toBeHidden();
+  await expect(page.locator("#document-outline")).toBeHidden();
+  await expect(footer).toBeHidden();
   await expect(toolbar).toBeHidden();
   await expect(page.getByRole("heading", { name: "Markdown 编辑器", exact: true })).toHaveCount(0);
-  await expect.poll(() => page.locator(".workbench").evaluate(shell => {
-    return Math.round(shell.getBoundingClientRect().width) === document.documentElement.clientWidth;
-  })).toBe(true);
+  await expect.poll(() => page.getByRole("main").evaluate(main =>
+    Math.round(main.getBoundingClientRect().width) === document.documentElement.clientWidth
+  )).toBe(true);
   await handle.hover();
   await expect(toolbar).toBeVisible();
+  const edit = toolbar.getByRole("button", { name: "编辑", exact: true });
+  const source = toolbar.getByRole("button", { name: "源码", exact: true });
+  const outline = toolbar.getByRole("button", { name: "文档大纲", exact: true });
+  for (const button of [edit, source, outline, status]) {
+    await expect(button).toHaveText("");
+    await expect(button.locator("svg")).toBeVisible();
+    await expect(button).toHaveAttribute("title", /.+/);
+  }
+  await expect(edit).toHaveAttribute("aria-pressed", "true");
+  await expect(status).toHaveAttribute("aria-pressed", "false");
   await page.mouse.move(550, 180);
   await expect(toolbar).toBeHidden();
 
-  await revealToolbar(page);
-  await toolbar.getByRole("button", { name: "状态栏", exact: true }).click();
-  await expect(footer).toBeHidden();
-  await toolbar.getByRole("button", { name: "状态栏", exact: true }).hover();
-  await expect(toolbar.getByRole("button", { name: "状态栏", exact: true })).toHaveAttribute("aria-pressed", "false");
-  await page.reload();
-  await expect(footer).toBeHidden();
   await handle.press("Enter");
   await expect(toolbar).toBeVisible();
-  await toolbar.getByRole("button", { name: "状态栏", exact: true }).click();
+  const files = await fileManager(page);
+  await expect(files.getByText("文件保存在此浏览器")).toHaveCount(0);
+  await status.click();
   await expect(footer).toBeVisible();
-  await toolbar.getByRole("button", { name: "源码", exact: true }).click();
+  await source.click();
+  await expect(source).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("textbox", { name: "Markdown 正文", exact: true }).fill("# 项目\n\n写作 hello world");
   const stats = footer.getByRole("group", { name: "文档统计" });
   await expect(stats.getByText("6 字词", { exact: true })).toBeVisible();
   await expect(stats.getByText("3 行", { exact: true })).toBeVisible();
   await page.reload();
   await expect(stats.getByText("6 字词", { exact: true })).toBeVisible();
+  await status.click();
+  await expect(footer).toBeHidden();
+  await page.reload();
+  await expect(footer).toBeHidden();
 });
 
 test("自定义主题预览后应用到工作区、代码和全屏，刷新后仍可切换回内置主题", async ({ page }) => {
@@ -500,11 +511,11 @@ test.describe("未保存语言偏好", () => {
     const root = page.locator("html");
     await expect(root).toHaveAttribute("lang", "en");
     await expect(page).toHaveTitle("Markdown Editor");
-    await expect(page.getByRole("heading", { name: "File manager", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Getting started", exact: true })).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem("lition13-markdown-editor-locale"))).toBeNull();
 
     const toolbar = await revealToolbar(page, "en");
+    await expect(toolbar.getByRole("button", { name: "File manager", exact: true })).toBeVisible();
     const trigger = toolbar.getByRole("button", { name: "Interface language", exact: true });
     const menu = toolbar.getByRole("menu", { name: "Interface language", exact: true });
     const english = menu.getByRole("menuitemradio", { name: "English", exact: true });
@@ -550,7 +561,9 @@ test("在线版切换中英文后保留文档、撤销历史和浏览器偏好",
   await expect(root).toHaveAttribute("lang", "zh-CN");
   const files = await fileManager(page);
   await expect(page.getByRole("heading", { name: "开始写作", exact: true })).toBeVisible();
+  await documentOutline(page);
   const toolbar = await revealToolbar(page);
+  await toolbar.getByRole("button", { name: "状态栏", exact: true }).click();
   const editSource = toolbar.getByRole("button", { name: "源码", exact: true });
   await editSource.click();
   const original = "# 保留标题\n\n中文和 English 正文。";
@@ -635,7 +648,8 @@ test("完整的入门示例按语言切换并保留编辑和删除操作", async
 
   await chooseChinese();
   await expect(chineseSample).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "章节", exact: true }).getByRole("button", { name: "图片和脚注", exact: true })).toBeVisible();
+  const outline = await documentOutline(page);
+  await expect(outline.getByRole("button", { name: "图片和脚注", exact: true })).toBeVisible();
   await chooseEnglish();
   await expect(englishSample).toBeVisible();
   await page.getByRole("button", { name: "Top toolbar", exact: true }).hover();
@@ -692,7 +706,8 @@ test("旧默认示例升级后打开英文版，保留中文示例和同名个�
   await expect(files.getByRole("button", { name: "Getting started (2).md", exact: true })).toHaveAttribute("aria-current", "true");
   await files.getByRole("button", { name: "入门示例.md", exact: true }).click();
   await expect(page.getByRole("heading", { name: "开始写作", exact: true })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Sections", exact: true }).getByRole("button", { name: "代码和 YAML", exact: true })).toBeVisible();
+  const outline = await documentOutline(page, "en");
+  await expect(outline.getByRole("button", { name: "代码和 YAML", exact: true })).toBeVisible();
   await files.getByRole("button", { name: "Getting started.md", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Personal document", exact: true })).toBeVisible();
   await page.reload();
@@ -759,6 +774,13 @@ test("文件栏、大纲和顶栏在刷新与重新打开后恢复显隐", async
   const files = page.locator("#file-manager");
   const outline = page.locator("#document-outline");
   await handle.click();
+  await fileManager(page);
+  await documentOutline(page);
+  await page.reload();
+  await expect(toolbar).toBeVisible();
+  await expect(files).toBeVisible();
+  await expect(outline).toBeVisible();
+
   await files.getByRole("button", { name: "关闭文件管理" }).click();
   await toolbar.getByRole("button", { name: "文档大纲", exact: true }).click();
   await page.mouse.move(600, 200);
@@ -786,10 +808,13 @@ test("文件栏、大纲和顶栏在刷新与重新打开后恢复显隐", async
 });
 
 test("窄窗恢复上次的抽屉，宽屏侧栏使用各自的显隐偏好", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("./");
+  await fileManager(page);
+  const outline = await documentOutline(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator("#file-manager")).toBeHidden();
+  await expect(outline).toBeHidden();
   const files = await fileManager(page);
-  const outline = page.locator("#document-outline");
   await expect(files).toHaveAttribute("open", "");
   await page.reload();
   await expect(files).toHaveAttribute("open", "");
@@ -828,8 +853,10 @@ test("导入 SKILL.md 后高亮并编辑 YAML，刷新和导出保留文件头",
   await files.getByLabel("选择 Markdown 文件").setInputFiles({
     name: "SKILL.md", mimeType: "text/markdown", buffer: Buffer.from("\uFEFF" + source.replace(/\n/g, "\r\n")),
   });
+  const outline = await documentOutline(page);
+  const toolbar = await revealToolbar(page);
+  await toolbar.getByRole("button", { name: "状态栏", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "Markdown 正文", exact: true });
-  const outline = page.getByRole("complementary", { name: "文档大纲" });
   const yamlKey = editor.locator(".hljs-attr", { hasText: "name:" });
   await expect(editor.locator(".cm-md-yaml-opener")).toBeVisible();
   await expect(yamlKey).toHaveCSS("color", "rgb(23, 81, 160)");
@@ -837,7 +864,6 @@ test("导入 SKILL.md 后高亮并编辑 YAML，刷新和导出保留文件头",
   await expect(outline.getByRole("navigation", { name: "章节" }).getByRole("button")).toHaveText(["使用方法"]);
   await expect(page.getByRole("group", { name: "文档统计" })).toContainText("8 字词");
   await expect(page.getByRole("group", { name: "文档统计" })).toContainText("13 行");
-  const toolbar = await revealToolbar(page);
   await toolbar.getByRole("button", { name: "切换深色主题" }).click();
   await expect(yamlKey).toHaveCSS("color", "rgb(121, 192, 255)");
   await page.mouse.move(520, 410);
@@ -880,6 +906,7 @@ test("大纲识别实际标题，从正文和源码跳到长文档中的章节",
   await files.getByLabel("选择 Markdown 文件").setInputFiles({
     name: "长文档.md", mimeType: "text/markdown", buffer: Buffer.from(source),
   });
+  await documentOutline(page);
   const outline = page.getByRole("complementary", { name: "文档大纲" });
   await expect(outline.getByRole("button", { name: "代码块里的标题", exact: true })).toHaveCount(0);
   const ending = outline.getByRole("button", { name: "收尾事项", exact: true });
@@ -1079,7 +1106,8 @@ test.describe("GitHub Pages", () => {
     await page.goto("./");
     const document = page.locator(".notes-live-document");
     await expect(document.getByRole("table").filter({ hasText: "Insert a table" })).toBeVisible();
-    await page.getByRole("navigation", { name: "Sections", exact: true }).getByRole("button", { name: "Math and diagrams", exact: true }).click();
+    const outline = await documentOutline(page, "en");
+    await outline.getByRole("button", { name: "Math and diagrams", exact: true }).click();
     await expect(document.locator(".katex").first()).toBeVisible();
     await localFont;
     await expect(document.locator(".mermaid-canvas svg")).toBeVisible({ timeout: 30_000 });

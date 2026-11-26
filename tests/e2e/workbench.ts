@@ -22,6 +22,16 @@ export async function fileManager(page: Page, locale: Locale = "zh-CN") {
   return panel;
 }
 
+export async function documentOutline(page: Page, locale: Locale = "zh-CN") {
+  const panel = page.locator("#document-outline");
+  if (await panel.isHidden()) {
+    const toolbar = await revealToolbar(page, locale);
+    await toolbar.getByRole("button", { name: locale === "en" ? "Document outline" : "文档大纲", exact: true }).click();
+    await expect(panel).toBeVisible();
+  }
+  return panel;
+}
+
 export async function chooseInterfaceLanguage(page: Page, from: Locale, to: Locale) {
   const toolbar = await revealToolbar(page, from);
   await toolbar.getByRole("button", { name: from === "en" ? "Interface language" : "界面语言", exact: true }).click();

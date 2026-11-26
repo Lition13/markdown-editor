@@ -163,7 +163,7 @@ button, input, select { font: inherit; }
   cursor: pointer;
 }
 .button { border-color: var(--edge); }
-.button:hover, .icon-control:hover { background: var(--panel-soft); }
+.button:hover, .icon-control:hover, .view-options button:hover { background: var(--panel-soft); }
 .button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 .button.primary:hover { background: var(--accent-hover); }
 .button:disabled { opacity: .5; cursor: not-allowed; }
@@ -264,8 +264,8 @@ button, input, select { font: inherit; }
   border-radius: 9px;
   background: var(--panel);
 }
-.view-options button { min-height: 29px; padding: 0 9px; color: var(--muted); }
-.view-options button[aria-pressed="true"] { color: var(--text); background: var(--soft-accent); }
+.view-options button { width: 32px; min-height: 29px; padding: 0; color: var(--muted); }
+.view-options button[aria-pressed="true"] { color: var(--accent-text, var(--accent)); background: var(--soft-accent); }
 .view-options button:disabled { cursor: wait; }
 .workspace-body {
   --workspace-padding-top: max(46px, calc(var(--toolbar-space) + 23px));
@@ -616,12 +616,11 @@ dialog.side-panel::backdrop { background: #101a3278; }
 
 @media (max-width: 530px) {
   .workbench-toolbar { gap: 4px; padding-inline: 7px; }
-  .workbench-toolbar .tool-label, .view-options button svg { display: none; }
-  .workbench-toolbar .panel-toggle { min-width: 34px; padding-inline: 5px; }
+  .workbench-toolbar .tool-label { display: none; }
+  .workbench-toolbar .panel-toggle:not(.icon-control) { min-width: 34px; padding-inline: 5px; }
   .workbench-toolbar .icon-control { width: 32px; }
   .workbench-toolbar .language-trigger { padding-inline: 0; }
   .language-label, .language-chevron { display: none; }
-  .view-options button { padding-inline: 6px; }
   .document-name { font-size: .79rem; }
   .github { display: none; }
   .workspace-body { --workspace-padding-bottom: 29px; padding-inline: 13px; }
@@ -630,14 +629,12 @@ dialog.side-panel::backdrop { background: #101a3278; }
 }
 @media (max-width: 380px) {
   .workbench-toolbar { gap: 3px; padding-inline: 5px; }
-  .workbench-toolbar .panel-toggle { min-width: 30px; padding-inline: 4px; }
+  .workbench-toolbar .panel-toggle:not(.icon-control) { min-width: 30px; padding-inline: 4px; }
   .workbench-toolbar .icon-control { width: 28px; }
   .workbench-toolbar .document-name { display: none; }
 }
 @media (max-width: 420px) {
-  .workbench-toolbar .view-options button { width: 28px; padding-inline: 0; }
-  .workbench-toolbar .view-options button svg { display: block; }
-  .workbench-toolbar .view-label { display: none; }
+  .view-options button { width: 28px; }
 }
 @media (hover: none) and (pointer: coarse) {
   :root { --toolbar-edge: 34px; --toolbar-row: 50px; }
