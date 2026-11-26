@@ -1,10 +1,18 @@
 import { Search, X } from "lucide-react";
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { useResultNavigation } from "./fileSearch";
 
-export default function PickerDialog<T extends { id: string }>({ id, title, placeholder, closeLabel, resultsLabel, emptyLabel,
+export interface PickerDialogHandle {
+  readonly id: string;
+  readonly open: boolean;
+  readonly busy: boolean;
+  close(): void;
+}
+
+export default function PickerDialog<T extends { id: string }>({ ref, id, title, placeholder, closeLabel, resultsLabel, emptyLabel,
   busy = false, error, searchIcon, find, render, onQueryChange, onPick, onClose,
 }: {
+  ref?: Ref<PickerDialogHandle>;
   id: string;
   title: string;
   placeholder: string;
@@ -23,22 +31,45 @@ export default function PickerDialog<T extends { id: string }>({ id, title, plac
   const [query, setQuery] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  const previousSelection = useRef<{
+    field: HTMLInputElement | HTMLTextAreaElement;
+    start: number;
+    end: number;
+    direction: HTMLInputElement["selectionDirection"];
+  }>(null);
   const results = useMemo(() => find(query), [find, query]);
   const resultsId = id + "-results";
   const optionId = (itemId: string) => id + "-option-" + itemId;
-  const close = () => dialog.current?.close();
+  function close() {
+    const panel = dialog.current;
+    if (!panel?.open) return;
+    panel.close();
+    const previous = previousSelection.current;
+    if (previous && panel.ownerDocument.activeElement === previous.field) {
+      previous.field.setSelectionRange(previous.start, previous.end, previous.direction ?? undefined);
+    }
+    onClose();
+  }
   const pick = (item: T) => onPick(item, close);
   const navigation = useResultNavigation(results, { selectFirst: true, disabled: busy, elementId: optionId, onAccept: pick });
 
+  useImperativeHandle(ref, () => ({ id, busy, get open() { return dialog.current?.open === true; }, close }));
   useLayoutEffect(() => {
     const panel = dialog.current;
-    if (panel && !panel.open) panel.showModal();
+    if (panel && !panel.open) {
+      const field = panel.ownerDocument.activeElement;
+      if ((field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)
+        && field.selectionStart !== null && field.selectionEnd !== null) {
+        previousSelection.current = { field, start: field.selectionStart, end: field.selectionEnd, direction: field.selectionDirection };
+      }
+      panel.showModal();
+    }
     input.current?.focus();
   }, []);
 
   return (
-    <dialog ref={dialog} id={id} className="quick-open" aria-label={title} aria-busy={busy || undefined} onClose={onClose}
-      onCancel={event => { if (busy) event.preventDefault(); }}
+    <dialog ref={dialog} id={id} className="quick-open" aria-label={title} aria-busy={busy || undefined}
+      onCancel={event => { event.preventDefault(); if (!busy) close(); }}
       onClick={event => { if (event.target === event.currentTarget && !busy) close(); }}>
       <div className="quick-open-body">
         <div className="quick-open-query">

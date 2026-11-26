@@ -30,6 +30,13 @@ test("命令面板可按名称和快捷键搜索，执行编辑与撤销", async
   await source.press("End");
 
   await page.keyboard.press("Control+Shift+p");
+  await expect(search).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(palette).toBeHidden();
+  await expect(source).toBeFocused();
+  await expect.poll(() => source.evaluate((field: HTMLTextAreaElement) => field.selectionEnd)).toBe(2);
+
+  await page.keyboard.press("Control+Shift+p");
   await search.fill("> Ctrl+Alt+T");
   await expect(selected).toContainText("插入表格");
   await page.keyboard.press("Enter");
@@ -46,6 +53,17 @@ test("命令面板可按名称和快捷键搜索，执行编辑与撤销", async
   await page.keyboard.press("Enter");
   await expect(source).toHaveValue("正文");
   await expect(source).toBeFocused();
+
+  await source.press("Control+End");
+  const fullscreen = page.locator("dialog.markdown-editor-modal");
+  for (const expanded of [true, false]) {
+    await page.keyboard.press("Control+Shift+p");
+    await search.fill("切换全屏编辑");
+    await page.keyboard.press("Enter");
+    await expect(fullscreen).toHaveCount(expanded ? 1 : 0);
+    await expect(source).toBeFocused();
+    await expect.poll(() => source.evaluate((field: HTMLTextAreaElement) => field.selectionEnd)).toBe(2);
+  }
 });
 
 test("窄窗命令面板支持方向键、新建和导入，可切换到快速打开", async ({ page }) => {

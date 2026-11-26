@@ -1,11 +1,12 @@
 import { FileText } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type Ref } from "react";
 import { FileLibraryError, type FileEntry, type FolderEntry } from "./files";
 import { indexFiles, searchFiles } from "./fileSearch";
 import { useWebText, type WebMessage } from "./locale";
-import PickerDialog from "./PickerDialog";
+import PickerDialog, { type PickerDialogHandle } from "./PickerDialog";
 
-export default function QuickOpen({ files, folders, onClose, onOpen }: {
+export default function QuickOpen({ ref, files, folders, onClose, onOpen }: {
+  ref?: Ref<PickerDialogHandle>;
   files: FileEntry[];
   folders: FolderEntry[];
   onClose: () => void;
@@ -34,7 +35,7 @@ export default function QuickOpen({ files, folders, onClose, onOpen }: {
   }
 
   return (
-    <PickerDialog id="quick-open" title={t("快速打开文件")} placeholder={t("输入文件名或路径")} closeLabel={t("关闭快速打开")}
+    <PickerDialog ref={ref} id="quick-open" title={t("快速打开文件")} placeholder={t("输入文件名或路径")} closeLabel={t("关闭快速打开")}
       resultsLabel={t("文件搜索结果")} emptyLabel={t("没有匹配的文件")} busy={busy} error={error ? t(error) : undefined}
       find={find} onQueryChange={() => setError(null)} onClose={onClose} onPick={(file, close) => { void openFile(file.id, close); }}
       render={file => <>

@@ -1,8 +1,8 @@
 import { Terminal } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, type Ref } from "react";
 import { matchRank } from "./fileSearch";
 import { useWebText } from "./locale";
-import PickerDialog from "./PickerDialog";
+import PickerDialog, { type PickerDialogHandle } from "./PickerDialog";
 
 export interface PaletteCommand {
   id: string;
@@ -14,7 +14,11 @@ export interface PaletteCommand {
 
 const normalize = (text: string) => text.normalize("NFKC").toLowerCase();
 
-export default function CommandPalette({ commands, onClose }: { commands: readonly PaletteCommand[]; onClose: () => void }) {
+export default function CommandPalette({ ref, commands, onClose }: {
+  ref?: Ref<PickerDialogHandle>;
+  commands: readonly PaletteCommand[];
+  onClose: () => void;
+}) {
   const t = useWebText();
   const find = useCallback((query: string) => {
     const terms = normalize(query).replace(/^\s*>/, "").trim().split(/\s+/).filter(Boolean);
@@ -27,7 +31,7 @@ export default function CommandPalette({ commands, onClose }: { commands: readon
     }).filter(item => Number.isFinite(item.score)).sort((left, right) => left.score - right.score).map(item => item.command);
   }, [commands]);
 
-  return <PickerDialog id="command-palette" title={t("命令面板")} placeholder={t("搜索命令")} closeLabel={t("关闭命令面板")}
+  return <PickerDialog ref={ref} id="command-palette" title={t("命令面板")} placeholder={t("搜索命令")} closeLabel={t("关闭命令面板")}
     resultsLabel={t("命令搜索结果")} emptyLabel={t("没有匹配的命令")} searchIcon={<Terminal size={18} aria-hidden="true" />}
     find={find} onClose={onClose} onPick={(command, close) => command.run(close)}
     render={command => <>

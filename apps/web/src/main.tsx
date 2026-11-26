@@ -3,13 +3,14 @@ import {
   type MarkdownEditorCommand, type MarkdownEditorHandle, type MarkdownLocale, type MarkdownMode, type MarkdownOutlineItem, type MarkdownShortcutOverrides, type MarkdownTheme,
 } from "@lition13/markdown-editor";
 import { CodeXml, FileText, FolderOpen, Github, Keyboard, ListTree, Moon, Palette, PanelBottom, PencilLine, Sun, Terminal, X } from "lucide-react";
-import { StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode, type Ref } from "react";
 import { createRoot } from "react-dom/client";
 import "@lition13/markdown-editor/style.css";
 import CommandPalette, { type PaletteCommand } from "./CommandPalette";
 import FileManager, { type FileManagerCommand, type FileManagerHandle } from "./FileManager";
 import LanguageMenu from "./LanguageMenu";
 import { defaultWebLocale, formatDocumentCount, useWebLocale, useWebText, WebLocale, webTranslator } from "./locale";
+import type { PickerDialogHandle } from "./PickerDialog";
 import QuickOpen from "./QuickOpen";
 import ShortcutSettings from "./ShortcutSettings";
 import SidePanel from "./SidePanel";
@@ -129,7 +130,7 @@ function Toolbar({ children, onLocaleChange }: { children: ReactNode; onLocaleCh
 function Workspace({
   library, theme, customThemeActive, toggleTheme, showThemeSettings, compact, filesOpen, outlineOpen, statusOpen, showFiles,
   toggleFiles, toggleOutline, closeOutline, toggleStatus, shortcuts, filesShortcut, outlineShortcut, showShortcuts, onLocaleChange,
-  fileOpenRequest, commands, commandShortcut, showCommands, closeCommands, closeDrawer,
+  fileOpenRequest, commands, commandShortcut, showCommands, closeCommands, closeDrawer, pickerRef,
 }: {
   library: ReturnType<typeof useFileLibrary>;
   theme: MarkdownTheme;
@@ -156,6 +157,7 @@ function Workspace({
   showCommands: () => void;
   closeCommands: () => void;
   closeDrawer: () => void;
+  pickerRef: Ref<PickerDialogHandle>;
 }) {
   const locale = useWebLocale();
   const t = webTranslator(locale);
@@ -383,7 +385,7 @@ function Workspace({
           )}
       </footer>
       {!statusOpen && <span role="status" className="visually-hidden">{t(status)}</span>}
-      {commands && <CommandPalette commands={[...commands, ...editorCommands]} onClose={closeCommands} />}
+      {commands && <CommandPalette ref={pickerRef} commands={[...commands, ...editorCommands]} onClose={closeCommands} />}
     </>
   );
 }
@@ -413,6 +415,7 @@ function App() {
   const [searchFocusRequest, setSearchFocusRequest] = useState(0);
   const filesReturnFocus = useRef<HTMLElement | null>(null);
   const fileManager = useRef<FileManagerHandle>(null);
+  const pickerRef = useRef<PickerDialogHandle>(null);
   const [drawer, setDrawer] = useState(() => {
     const value = preference(drawerKey);
     return value === "files" || value === "outline" ? value : null;
@@ -444,10 +447,11 @@ function App() {
   useEffect(() => { if (!filesOpen) filesReturnFocus.current = null; }, [filesOpen]);
 
   const togglePicker = useCallback((id: PickerId) => {
-    const current = document.querySelector<HTMLDialogElement>("#quick-open[open], #command-palette[open]");
-    if (current?.getAttribute("aria-busy") === "true") return;
+    const current = pickerRef.current;
+    if (current?.busy) return;
+    const closing = current?.open && current.id === id;
     current?.close();
-    if (current?.id !== id) setPicker(id);
+    if (!closing) setPicker(id);
   }, []);
 
   function closePicker(id: PickerId) {
@@ -586,11 +590,11 @@ function App() {
         toggleTheme={toggleTheme}
         toggleFiles={toggleFiles} toggleOutline={toggleOutline}
         closeOutline={closeOutline} toggleStatus={() => setStatusOpen(value => !value)} onLocaleChange={changeLocale}
-        fileOpenRequest={fileOpenRequest} commands={commands} commandShortcut={commandShortcut}
+        fileOpenRequest={fileOpenRequest} commands={commands} commandShortcut={commandShortcut} pickerRef={pickerRef}
         showCommands={() => togglePicker("command-palette")} closeCommands={() => closePicker("command-palette")} closeDrawer={() => setDrawer(null)} />
       <FileManager ref={fileManager} library={library} open={filesOpen} compact={compact} onClose={closeFiles} onOpenFile={openInEditor}
         searchFocusRequest={searchFocusRequest} />
-      {picker === "quick-open" && <QuickOpen files={library.files} folders={library.folders} onClose={() => closePicker("quick-open")} onOpen={async id => {
+      {picker === "quick-open" && <QuickOpen ref={pickerRef} files={library.files} folders={library.folders} onClose={() => closePicker("quick-open")} onOpen={async id => {
         await openInEditor(id, true);
         if (compact) setDrawer(null);
       }} />}
