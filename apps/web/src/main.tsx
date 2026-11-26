@@ -14,7 +14,7 @@ import SidePanel from "./SidePanel";
 import ThemeSettings from "./ThemeSettings";
 import { readThemePreference, themeVariables, validateThemeName, type CustomTheme, type ThemePreference } from "./themes";
 import { useFileLibrary } from "./useFileLibrary";
-import { getOutlineShortcut, readWorkbenchShortcutOverrides, type WorkbenchShortcutOverrides } from "./workbenchShortcuts";
+import { getPanelShortcut, readWorkbenchShortcutOverrides, type WorkbenchShortcutOverrides } from "./workbenchShortcuts";
 import "./site.css";
 
 const themeKey = "lition13-markdown-editor-theme";
@@ -122,7 +122,7 @@ function Toolbar({ children, onLocaleChange }: { children: ReactNode; onLocaleCh
 
 function Workspace({
   library, theme, customThemeActive, toggleTheme, showThemeSettings, compact, filesOpen, outlineOpen, statusOpen, showFiles,
-  toggleFiles, toggleOutline, closeOutline, toggleStatus, shortcuts, outlineShortcut, showShortcuts, onLocaleChange,
+  toggleFiles, toggleOutline, closeOutline, toggleStatus, shortcuts, filesShortcut, outlineShortcut, showShortcuts, onLocaleChange,
 }: {
   library: ReturnType<typeof useFileLibrary>;
   theme: MarkdownTheme;
@@ -139,12 +139,14 @@ function Workspace({
   closeOutline: () => void;
   toggleStatus: () => void;
   shortcuts: MarkdownShortcutOverrides;
+  filesShortcut: string | null;
   outlineShortcut: string | null;
   showShortcuts: () => void;
   onLocaleChange: (locale: MarkdownLocale) => void;
 }) {
   const locale = useWebLocale();
   const t = webTranslator(locale);
+  const filesName = t("文件管理");
   const outlineName = t("文档大纲");
   const editor = useRef<MarkdownEditorHandle>(null);
   const footer = useRef<HTMLElement>(null);
@@ -195,7 +197,8 @@ function Workspace({
   return (
     <>
       <Toolbar onLocaleChange={onLocaleChange}>
-        <button type="button" className="button icon-control panel-toggle" aria-label={t("文件管理")} title={t("文件管理")}
+        <button type="button" className="button icon-control panel-toggle" aria-label={filesName}
+          title={filesShortcut ? `${filesName} (${filesShortcut})` : filesName}
           aria-haspopup={compact ? "dialog" : undefined} aria-controls="file-manager" aria-expanded={filesOpen}
           disabled={!ready} onClick={toggleFiles}>
           <FolderOpen size={16} aria-hidden="true" />
@@ -320,25 +323,33 @@ function App() {
   });
   const filesOpen = compact ? drawer === "files" : filesVisible;
   const outlineOpen = compact ? drawer === "outline" : outlineVisible;
-  const outlineShortcut = getOutlineShortcut(shortcuts);
+  const filesShortcut = getPanelShortcut("files", shortcuts);
+  const outlineShortcut = getPanelShortcut("outline", shortcuts);
+  const toggleFiles = useCallback(() => {
+    if (compact) setDrawer(current => current === "files" ? null : "files");
+    else setFilesVisible(visible => !visible);
+  }, [compact, setFilesVisible]);
   const toggleOutline = useCallback(() => {
     if (compact) setDrawer(current => current === "outline" ? null : "outline");
     else setOutlineVisible(visible => !visible);
   }, [compact, setOutlineVisible]);
 
   useEffect(() => {
-    if (!outlineShortcut) return;
-    function onOutlineKey(event: KeyboardEvent) {
-      if (event.defaultPrevented || event.isComposing || event.keyCode === 229
-        || markdownShortcutFromEvent(event) !== outlineShortcut
-        || document.querySelector("dialog[open]:not(#document-outline)")) return;
+    const panelKeys = new Map<string, { id: string; toggle: () => void }>();
+    if (filesShortcut && library.ready) panelKeys.set(filesShortcut, { id: "file-manager", toggle: toggleFiles });
+    if (outlineShortcut) panelKeys.set(outlineShortcut, { id: "document-outline", toggle: toggleOutline });
+    if (!panelKeys.size) return;
+    function onPanelKey(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
+      const panel = panelKeys.get(markdownShortcutFromEvent(event));
+      if (!panel || document.querySelector(`dialog[open]:not(#${panel.id})`)) return;
       event.preventDefault();
       event.stopPropagation();
-      if (!event.repeat) toggleOutline();
+      if (!event.repeat) panel.toggle();
     }
-    document.addEventListener("keydown", onOutlineKey, true);
-    return () => document.removeEventListener("keydown", onOutlineKey, true);
-  }, [outlineShortcut, toggleOutline]);
+    document.addEventListener("keydown", onPanelKey, true);
+    return () => document.removeEventListener("keydown", onPanelKey, true);
+  }, [filesShortcut, library.ready, outlineShortcut, toggleFiles, toggleOutline]);
 
   useLayoutEffect(() => {
     document.documentElement.lang = locale;
@@ -422,10 +433,9 @@ function App() {
       <Workspace library={library} theme={theme}
         customThemeActive={!!customTheme} showThemeSettings={() => setThemeSettingsOpen(true)}
         compact={compact} filesOpen={filesOpen} outlineOpen={outlineOpen} statusOpen={statusOpen} showFiles={showFiles}
-        shortcuts={shortcuts} outlineShortcut={outlineShortcut} showShortcuts={() => setShortcutsOpen(true)}
+        shortcuts={shortcuts} filesShortcut={filesShortcut} outlineShortcut={outlineShortcut} showShortcuts={() => setShortcutsOpen(true)}
         toggleTheme={toggleTheme}
-        toggleFiles={filesOpen ? closeFiles : showFiles}
-        toggleOutline={toggleOutline}
+        toggleFiles={toggleFiles} toggleOutline={toggleOutline}
         closeOutline={closeOutline} toggleStatus={() => setStatusOpen(value => !value)} onLocaleChange={changeLocale} />
       <FileManager library={library} open={filesOpen} compact={compact} onClose={closeFiles} />
       {shortcutsOpen && <ShortcutSettings value={shortcuts} onChange={updateShortcuts} onClose={() => setShortcutsOpen(false)}

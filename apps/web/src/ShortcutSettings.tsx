@@ -5,7 +5,7 @@ import { PencilLine, Search, X } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useWebLocale, webTranslator } from "./locale";
 import {
-  checkWorkbenchShortcut, getWorkbenchShortcutCommands, type WorkbenchShortcutDefinition, type WorkbenchShortcutOverrides,
+  checkWorkbenchShortcut, getWorkbenchShortcutCommands, isPanelShortcut, type WorkbenchShortcutDefinition, type WorkbenchShortcutOverrides,
 } from "./workbenchShortcuts";
 import "./shortcutSettings.css";
 
@@ -107,7 +107,7 @@ export default function ShortcutSettings({ value, onChange, onClose, storageFail
     if (!chord) return;
     event.preventDefault();
     event.stopPropagation();
-    if (chord === editorShortcutPrefix && editing?.id !== "outline") {
+    if (chord === editorShortcutPrefix && editing && !isPanelShortcut(editing.id)) {
       setCapture("second");
       return;
     }
@@ -136,8 +136,8 @@ export default function ShortcutSettings({ value, onChange, onClose, storageFail
       </div>
       {issue ? <p id="shortcut-conflict" className="shortcut-issue" data-kind={issue.kind} role={issue.kind === "warning" ? "status" : "alert"}>
         {issue.message}
-      </p> : <p id="shortcut-input-hint" className="shortcut-hint">{command.id === "outline"
-        ? t("大纲快捷键使用一组按键，例如 Ctrl+Alt+O。")
+      </p> : <p id="shortcut-input-hint" className="shortcut-hint">{isPanelShortcut(command.id)
+        ? t("请使用一组按键，例如 {shortcut}。", { shortcut: command.key })
         : t("可录制或手动输入。带 → 的组合先按 {prefix}，松开后再按第二个键。", { prefix: editorShortcutPrefix })}</p>}
       <div className="shortcut-actions">
         <button className="button" type="button" disabled={value[command.id] === undefined} onClick={() => save(undefined)}>{t("恢复默认")}</button>

@@ -30,7 +30,7 @@
 
 「文件管理」以目录树显示文件和文件夹。点击文件夹可原地展开或收起，刷新后保留展开状态。新建和导入使用当前选中的文件夹，点击「文件库」可选择根目录。文件与文件夹可直接拖到目标文件夹或「文件库」，触屏从文件或文件夹图标开始拖动，键盘可在条目上按 Shift+Space 选择放置位置。用「导出」将当前文件保存为 Markdown。
 
-插入表格默认使用 Ctrl+Alt+T，显示或隐藏文档大纲默认使用 Ctrl+Alt+O。在顶部工具栏点键盘图标打开「快捷键设置」，可以搜索命令、录制或输入组合、停用和恢复默认。设置即时生效并保存在当前浏览器，斜杠菜单和表格菜单会显示当前绑定。设置带有「→」的自定义组合后，先按 Ctrl+Shift+. 并松开，再按箭头右边的键。
+插入表格默认使用 Ctrl+Alt+T，显示或隐藏文档大纲默认使用 Ctrl+Alt+O，显示或隐藏文件管理默认使用 Ctrl+Alt+F。在顶部工具栏点键盘图标打开「快捷键设置」，可以搜索命令、录制或输入组合、停用和恢复默认。设置即时生效并保存在当前浏览器，斜杠菜单和表格菜单会显示当前绑定。设置带有「→」的自定义组合后，先按 Ctrl+Shift+. 并松开，再按箭头右边的键。
 
 快捷键设置会拦截同一编辑场景中的重复组合与常见保留键，其他可能冲突的组合会显示提示。扩展程序和自定义系统键以实际按键行为为准。[Chrome 快捷键](https://support.google.com/chrome/answer/157179?hl=en)、[Edge 快捷键](https://support.microsoft.com/en-gb/edge/keyboard-shortcuts-in-microsoft-edge)、[Firefox 快捷键](https://support.mozilla.org/en-US/kb/keyboard-shortcuts-perform-firefox-tasks-quickly)、[Windows 快捷键](https://support.microsoft.com/en-us/accessibility/windows/keyboard-shortcuts-in-windows)
 

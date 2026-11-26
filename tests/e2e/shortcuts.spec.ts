@@ -221,3 +221,73 @@ test("升级后保留占用大纲默认键的旧快捷键", async ({ page }) => 
   await form.getByRole("button", { name: "恢复默认", exact: true }).click();
   await expect(form.getByRole("alert")).toHaveText("与「插入链接」的快捷键冲突。");
 });
+
+test("文件管理快捷键可开关侧栏和抽屉，修改后刷新保留", async ({ page }) => {
+  await page.goto("./");
+  await expect(notes(page)).toBeVisible();
+  const toolbar = page.locator("#workbench-toolbar");
+  const files = page.locator("#file-manager");
+  await expect(toolbar).toBeHidden();
+  await expect(files).toBeHidden();
+  await page.keyboard.press("Control+Alt+f");
+  await expect(files).toBeVisible();
+  await notes(page).press("Control+Alt+f");
+  await expect(files).toBeHidden();
+  await expect(notes(page)).toBeFocused();
+
+  const settings = await openSettings(page);
+  const outline = await editShortcut(settings, "切换文档大纲");
+  await outline.getByRole("textbox", { name: "快捷键组合", exact: true }).fill("Ctrl+Alt+F");
+  await expect(outline.getByRole("alert")).toHaveText("与「切换文件管理」的快捷键冲突。");
+  const form = await editShortcut(settings, "切换文件管理");
+  const input = form.getByRole("textbox", { name: "快捷键组合", exact: true });
+  const save = form.getByRole("button", { name: "保存", exact: true });
+  await expect(input).toHaveValue("Ctrl+Alt+F");
+  await input.fill("ctrl + alt + o");
+  await expect(form.getByRole("alert")).toHaveText("与「切换文档大纲」的快捷键冲突。");
+  await expect(save).toBeDisabled();
+  const record = form.getByRole("button", { name: "录制", exact: true });
+  await record.click();
+  await page.keyboard.press("Control+Alt+f");
+  await expect(input).toHaveValue("Ctrl+Alt+F");
+  await expect(files).toBeHidden();
+  await record.click();
+  await page.keyboard.press("Control+Shift+F7");
+  await expect(input).toHaveValue("Ctrl+Shift+F7");
+  await save.click();
+  await closeSettings(settings);
+
+  await revealToolbar(page);
+  await expect(toolbar.getByRole("button", { name: "文件管理", exact: true })).toHaveAttribute("title", "文件管理 (Ctrl+Shift+F7)");
+  await notes(page).press("Control+Alt+f");
+  await expect(files).toBeHidden();
+  await notes(page).press("Control+Shift+F7");
+  await expect(files).toBeVisible();
+  await page.reload();
+  await expect(notes(page)).toBeVisible();
+  await expect(files).toBeVisible();
+  await page.keyboard.press("Control+Shift+F7");
+  await expect(files).toBeHidden();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator("dialog#file-manager")).toBeAttached();
+  await page.keyboard.press("Control+Shift+F7");
+  await expect(files).toHaveAttribute("open", "");
+  await page.keyboard.press("Control+Shift+F7");
+  await expect(files).toBeHidden();
+});
+
+test("升级后保留占用文件管理默认键的旧大纲绑定", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("lition13-markdown-editor-shortcuts", JSON.stringify({ outline: "Ctrl+Alt+F" })));
+  await page.goto("./");
+  await expect(notes(page)).toBeVisible();
+  await page.keyboard.press("Control+Alt+f");
+  await expect(page.locator("#document-outline")).toBeVisible();
+  await expect(page.locator("#file-manager")).toBeHidden();
+
+  const settings = await openSettings(page);
+  const form = await editShortcut(settings, "切换文件管理");
+  await expect(settings.getByRole("button", { name: "修改 切换文件管理", exact: true })).toContainText("已停用");
+  await form.getByRole("button", { name: "恢复默认", exact: true }).click();
+  await expect(form.getByRole("alert")).toHaveText("与「切换文档大纲」的快捷键冲突。");
+});
