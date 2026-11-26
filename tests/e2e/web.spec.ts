@@ -1056,30 +1056,34 @@ test("目录树同时展开多个分支，折叠保留当前文档，搜索打�
   await expect(archived).toBeVisible();
 });
 
-test("Pages 子路径通过站内资源渲染公式和 Mermaid", async ({ page, context }) => {
-  const errors: string[] = [];
-  const external: string[] = [];
-  const origin = "http://127.0.0.1:4173/";
-  await context.route("**/*", route => {
-    const url = route.request().url();
-    if (url.startsWith(origin)) return route.continue();
-    external.push(url);
-    return route.abort();
+test.describe("GitHub Pages", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test("Pages 子路径通过站内资源渲染公式和 Mermaid", async ({ page, context }) => {
+    const errors: string[] = [];
+    const external: string[] = [];
+    const origin = "http://127.0.0.1:4173/";
+    await context.route("**/*", route => {
+      const url = route.request().url();
+      if (url.startsWith(origin)) return route.continue();
+      external.push(url);
+      return route.abort();
+    });
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("console", message => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    const localFont = page.waitForResponse(response =>
+      response.url().startsWith(origin + "markdown-editor/") && response.request().resourceType() === "font" && response.ok(),
+    );
+    await page.goto("./");
+    const document = page.locator(".notes-live-document");
+    await expect(document.getByRole("table").filter({ hasText: "Insert a table" })).toBeVisible();
+    await page.getByRole("navigation", { name: "Sections", exact: true }).getByRole("button", { name: "Math and diagrams", exact: true }).click();
+    await expect(document.locator(".katex").first()).toBeVisible();
+    await localFont;
+    await expect(document.locator(".mermaid-canvas svg")).toBeVisible({ timeout: 30_000 });
+    expect(external).toEqual([]);
+    expect(errors).toEqual([]);
   });
-  page.on("pageerror", error => errors.push(error.message));
-  page.on("console", message => {
-    if (message.type() === "error") errors.push(message.text());
-  });
-  const localFont = page.waitForResponse(response =>
-    response.url().startsWith(origin + "markdown-editor/") && response.request().resourceType() === "font" && response.ok(),
-  );
-  await page.goto("./");
-  const document = page.locator(".notes-live-document");
-  await expect(document.getByRole("table").filter({ hasText: "Insert a table" })).toBeVisible();
-  await page.getByRole("navigation", { name: "章节", exact: true }).getByRole("button", { name: "Math and diagrams", exact: true }).click();
-  await expect(document.locator(".katex").first()).toBeVisible();
-  await localFont;
-  await expect(document.locator(".mermaid-canvas svg")).toBeVisible({ timeout: 30_000 });
-  expect(external).toEqual([]);
-  expect(errors).toEqual([]);
 });
