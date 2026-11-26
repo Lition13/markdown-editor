@@ -4,11 +4,12 @@ type Locale = "en" | "zh-CN";
 
 export async function revealToolbar(page: Page, locale: Locale = "zh-CN") {
   const toolbar = page.locator("#workbench-toolbar");
-  if (await toolbar.isHidden()) {
+  const handle = page.getByRole("button", { name: locale === "en" ? "Top toolbar" : "顶部工具栏", exact: true });
+  if (await handle.getAttribute("aria-pressed") !== "true") {
     await page.mouse.move(40, 110);
-    await page.getByRole("button", { name: locale === "en" ? "Top toolbar" : "顶部工具栏", exact: true }).hover();
-    await expect(toolbar).toBeVisible();
+    await handle.hover();
   }
+  await expect(toolbar).toBeVisible();
   return toolbar;
 }
 
